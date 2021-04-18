@@ -26,7 +26,7 @@ public class DBApp implements DBAppInterface{
         {
             FileOutputStream serializedFile = new FileOutputStream("src/main/resources/Tables/"+tableName+".ser");
             ObjectOutputStream out = new ObjectOutputStream(serializedFile);
-            out.writeObject(serializedFile);
+            out.writeObject(tableInstance);
             out.close();
             serializedFile.close();
 
