@@ -1,6 +1,7 @@
+import java.io.Serializable;
 import java.util.Vector;
 
-public class Table {
+public class Table implements Serializable {
    private String tableName;
    private Vector<Integer> minPrimaryKey;
    private Vector<Integer> maxPrimaryKey;
@@ -8,6 +9,8 @@ public class Table {
     public Table(String tableName)
     {
         this.tableName = tableName;
+        minPrimaryKey = new Vector<>();
+        maxPrimaryKey = new Vector<>();
     }
 
     public String getTableName() {
