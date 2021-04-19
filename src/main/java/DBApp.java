@@ -1,3 +1,5 @@
+import com.sun.tools.javac.Main;
+
 import java.io.*;
 import java.util.Hashtable;
 import java.util.Iterator;
@@ -12,6 +14,20 @@ public class DBApp implements DBAppInterface{
 
     @Override
     public void createTable(String tableName, String clusteringKey, Hashtable<String, String> colNameType, Hashtable<String, String> colNameMin, Hashtable<String, String> colNameMax) throws DBAppException {
+
+        //validating input
+        for(String col : colNameType.keySet())
+            if(!colNameMax.containsKey(col) || !colNameMin.containsKey(col))
+                throw new DBAppException();
+
+        for(String col : colNameMax.keySet())
+            if(!colNameType.containsKey(col) || !colNameMin.containsKey(col))
+                throw new DBAppException();
+
+        for(String col : colNameMin.keySet())
+            if(!colNameType.containsKey(col) || !colNameMax.containsKey(col))
+                throw new DBAppException();
+
 
         File tableDirectory = new File("src/main/resources/Tables/" + tableName);
 
@@ -36,27 +52,22 @@ public class DBApp implements DBAppInterface{
             e.printStackTrace();
         }
 
-        //validating input
-        for(String col : colNameType.keySet())
-            if(!colNameMax.containsKey(col) || !colNameMin.containsKey(col))
-                throw new DBAppException();
-
-        for(String col : colNameMax.keySet())
-            if(!colNameType.containsKey(col) || !colNameMin.containsKey(col))
-                throw new DBAppException();
-
-        for(String col : colNameMin.keySet())
-            if(!colNameType.containsKey(col) || !colNameMax.containsKey(col))
-                throw new DBAppException();
-
-
 
         //writing table info in MetaData
         try {
 
-            FileWriter metaDataFile = new FileWriter("src/main/resources/metadata.csv");
+            FileReader oldMetaDataFile = new FileReader("src/main/resources/metadata.csv");
 
+            BufferedReader br = new BufferedReader(oldMetaDataFile);
             StringBuilder tableMetaData = new StringBuilder();
+
+            String curLine = "";
+            while ((curLine = br.readLine())!=null)
+                tableMetaData.append(curLine);
+
+            tableMetaData.append("\n");
+
+            FileWriter metaDataFile = new FileWriter("src/main/resources/metadata.csv");
             for (String colName :  colNameType.keySet())
             {
                 tableMetaData.append(tableName+",");
@@ -65,7 +76,7 @@ public class DBApp implements DBAppInterface{
                 tableMetaData.append((colName.equals(clusteringKey)?"True":"False") + ",");
                 tableMetaData.append("False,");
                 tableMetaData.append(colNameMin.get(colName)+",");
-                tableMetaData.append(colNameMax.get(colName)+",");
+                tableMetaData.append(colNameMax.get(colName));
                 tableMetaData.append("\n");
             }
             metaDataFile.write(tableMetaData.toString());
@@ -102,4 +113,31 @@ public class DBApp implements DBAppInterface{
         return null;
     }
 
+
+    public static void main(String[] args) throws DBAppException {
+        String strTableName = "Student";
+        DBApp dbApp = new DBApp( );
+        Hashtable htblColNameType = new Hashtable( );
+        htblColNameType.put("id", "java.lang.Integer");
+        htblColNameType.put("name", "java.lang.String");
+        htblColNameType.put("gpa", "java.lang.double");
+
+        Hashtable htblColName = new Hashtable( );
+
+        htblColName.put("id","0");
+        htblColName.put("name", "0");
+        htblColName.put("gpa", "0");
+
+        Hashtable<String,String> ht = new Hashtable();
+        ht.put("id","1000");
+        ht.put("name", "1000");
+        ht.put("gpa", "10000");
+
+
+
+         //dbApp.createTable( strTableName, "id", htblColNameType,htblColName,ht);
+
+
+        
+    }
 }
