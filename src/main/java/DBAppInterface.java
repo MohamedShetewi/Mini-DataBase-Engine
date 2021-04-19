@@ -1,3 +1,5 @@
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.util.Hashtable;
 import java.util.Iterator;
 
@@ -11,7 +13,7 @@ public interface DBAppInterface {
 
     void insertIntoTable(String tableName, Hashtable<String, Object> colNameValue) throws DBAppException;
 
-    void updateTable(String tableName, String clusteringKeyValue, Hashtable<String, Object> columnNameValue) throws DBAppException;
+    void updateTable(String tableName, String clusteringKeyValue, Hashtable<String, Object> columnNameValue) throws DBAppException, IOException, ClassNotFoundException;
 
     void deleteFromTable(String tableName, Hashtable<String, Object> columnNameValue) throws DBAppException;
 
