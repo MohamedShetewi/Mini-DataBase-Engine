@@ -1,5 +1,7 @@
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.IOException;
+import java.text.ParseException;
 import java.util.Hashtable;
 import java.util.Iterator;
 
@@ -11,7 +13,7 @@ public interface DBAppInterface {
 
     void createIndex(String tableName, String[] columnNames) throws DBAppException;
 
-    void insertIntoTable(String tableName, Hashtable<String, Object> colNameValue) throws DBAppException;
+    void insertIntoTable(String tableName, Hashtable<String, Object> colNameValue) throws DBAppException, IOException, ParseException;
 
     void updateTable(String tableName, String clusteringKeyValue, Hashtable<String, Object> columnNameValue) throws DBAppException, IOException, ClassNotFoundException;
 
