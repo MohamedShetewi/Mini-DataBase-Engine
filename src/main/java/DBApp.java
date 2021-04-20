@@ -91,7 +91,8 @@ public class DBApp implements DBAppInterface {
 
     @Override
     public void insertIntoTable(String tableName, Hashtable<String, Object> colNameValue) throws DBAppException, IOException, ParseException {
-        //Check the table exists and the row is of the correct types (from metadata file)
+        //1- Check the table exists and the input record is valid.
+
         boolean found = false;
         ArrayList<String[]> tableCols = new ArrayList<>();
         try {
@@ -148,11 +149,21 @@ public class DBApp implements DBAppInterface {
     }
 
     private static void validateRecord(ArrayList<String[]> tableCols, Hashtable<String, Object> colNameValue) throws DBAppException, ParseException {
-        //still need to check primary key exists
-        //still need to check the input include all the fields
+        //complete.
+        //The method checks for the following
+        //The input record include (exactly) all the fields of the table.
+        //The input record's values are of the right types as the table in the metadata.
+        //The input record's values are in the range between their min and max values.
+
+        if (colNameValue.size() != tableCols.size())
+            throw new DBAppException("The record is not valid.\nAll fields must be included");
 
         for (String[] record : tableCols) {
             boolean valid = true;
+
+            if (!colNameValue.containsKey(record[1]))
+                throw new DBAppException("The field " + record[1] + "is not in the record" + ".\nAll fields must be included");
+
             Class c = colNameValue.get(record[1]).getClass();
             if ((c.getName()).equals(record[2])) {
                 if (c.getName().equals("java.lang.Integer")) {
