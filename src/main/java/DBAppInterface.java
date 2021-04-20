@@ -15,7 +15,7 @@ public interface DBAppInterface {
 
     void insertIntoTable(String tableName, Hashtable<String, Object> colNameValue) throws DBAppException, IOException, ParseException;
 
-    void updateTable(String tableName, String clusteringKeyValue, Hashtable<String, Object> columnNameValue) throws DBAppException, IOException, ClassNotFoundException;
+    void updateTable(String tableName, String clusteringKeyValue, Hashtable<String, Object> columnNameValue) throws DBAppException, IOException, ClassNotFoundException, ParseException;
 
     void deleteFromTable(String tableName, Hashtable<String, Object> columnNameValue) throws DBAppException;
 

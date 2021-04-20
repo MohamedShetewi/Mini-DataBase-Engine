@@ -3,12 +3,8 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.text.DateFormat;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.Hashtable;
-import java.util.Iterator;
+
+
 
 public class DBApp implements DBAppInterface {
     @Override
@@ -122,6 +118,7 @@ public class DBApp implements DBAppInterface {
         if (!found) {
             throw new DBAppException("There is no such table in the Data Base.");
         }
+
         validateRecord(tableCols, colNameValue);
 
     }
@@ -129,57 +126,16 @@ public class DBApp implements DBAppInterface {
     @Override
     public void updateTable(String tableName, String clusteringKeyValue,
                             Hashtable<String, Object> columnNameValue)
-            throws DBAppException, IOException, ClassNotFoundException {
-        FileReader metadata = new FileReader("src/main/resources/metadata.csv");
-        BufferedReader br = new BufferedReader(metadata);
-        String curLine = "";
-        Hashtable<String, String> colDataTypes = new Hashtable<>();
-        String clusteringType = "";
+            throws DBAppException, IOException, ClassNotFoundException, ParseException {
+        Object clusteringObject = validateUpdateInput(tableName, clusteringKeyValue, columnNameValue);
 
-        while ((curLine = br.readLine()) != null) {
-            String[] res = curLine.split(",");
-            if (res[0].equals(tableName)) {
-                colDataTypes.put(res[1], res[2]);
-                if (res[3].equals("True")) {
-                    clusteringType = res[2];
-                }
-            }
-        }
+        FileInputStream fileIn = new FileInputStream("src/main/resources/Tables/" + tableName + ".ser");
+        ObjectInputStream in = new ObjectInputStream(fileIn);
+        Table t = (Table) in.readObject();
+        in.close();
+        fileIn.close();
 
-        Object clusteringObject;
-        switch (clusteringType) {
-            case "java.lang.Integer":
-                try {
-                    clusteringObject = Integer.parseInt(clusteringKeyValue);
-                } catch (NumberFormatException e) {
-                    throw new DBAppException("Incompatible clustering key data type");
-                }
-                break;
-            case "java.lang.Double":
-                try {
-                    clusteringObject = Double.parseDouble(clusteringKeyValue);
-                } catch (NumberFormatException e) {
-                    throw new DBAppException("Incompatible clustering key data type");
-                }
-                break;
-            case "java.util.Date":
-                try {
-                    clusteringObject = new SimpleDateFormat("YYYY-MM-DD").parse(clusteringKeyValue);
-                } catch (ParseException e) {
-                    throw new DBAppException("Incompatible clustering key data type");
-                }
-                break;
-            default:
-                clusteringObject = clusteringKeyValue;
-                break;
-        }
 
-        for (String key : columnNameValue.keySet()) {
-            Class colClass = Class.forName(colDataTypes.get(key));
-            if (!colClass.isInstance(columnNameValue.get(key))) {
-                throw new DBAppException("Incompatible data types");
-            }
-        }
 
     }
 
@@ -244,29 +200,123 @@ public class DBApp implements DBAppInterface {
         }
     }
 
+    private Object validateUpdateInput(String tableName, String clusteringKeyValue,
+                                     Hashtable<String, Object> columnNameValue) throws IOException, ParseException, DBAppException, ClassNotFoundException {
+        FileReader metadata = new FileReader("src/main/resources/metadata.csv");
+        BufferedReader br = new BufferedReader(metadata);
+        String curLine = "";
+        Hashtable<String, String> colDataTypes = new Hashtable<>();
+        Hashtable<String, Object> colMin = new Hashtable<>();
+        Hashtable<String, Object> colMax = new Hashtable<>();
+        String clusteringType = "";
+
+        while((curLine = br.readLine()) != null){
+            String[] res = curLine.split(",");
+            if(res[0].equals(tableName)){
+                colDataTypes.put(res[1], res[2]);
+                switch (res[2]){
+                    case "java.lang.Integer":
+                        colMin.put(res[1], Integer.parseInt(res[5]));
+                        colMax.put(res[1], Integer.parseInt(res[6]));
+                        break;
+                    case "java.lang.Double":
+                        colMin.put(res[1], Double.parseDouble(res[5]));
+                        colMax.put(res[1], Double.parseDouble(res[6]));
+                        break;
+                    case "java.util.Date":
+                        colMin.put(res[1], new SimpleDateFormat("YYYY-MM-DD").parse(res[5]));
+                        colMax.put(res[1], new SimpleDateFormat("YYYY-MM-DD").parse(res[6]));
+                        break;
+                    default:
+                        colMin.put(res[1], res[5]);
+                        colMax.put(res[1], res[6]);
+                        break;
+                }
+                if(res[3].equals("True")){
+                    clusteringType = res[2];
+                }
+            }
+        }
+
+        Object clusteringObject;
+        switch (clusteringType){
+            case "java.lang.Integer":
+                try {
+                    clusteringObject = Integer.parseInt(clusteringKeyValue);
+                }catch (NumberFormatException e){
+                    throw new DBAppException("Incompatible clustering key data type");
+                }
+                break;
+            case "java.lang.Double":
+                try {
+                    clusteringObject = Double.parseDouble(clusteringKeyValue);
+                }catch (NumberFormatException e){
+                    throw new DBAppException("Incompatible clustering key data type");
+                }
+                break;
+            case "java.util.Date":
+                try {
+                    clusteringObject = new SimpleDateFormat("YYYY-MM-DD").parse(clusteringKeyValue);
+                }catch (ParseException e){
+                    throw new DBAppException("Incompatible clustering key data type");
+                }
+                break;
+            default:
+                clusteringObject = clusteringKeyValue;
+                break;
+        }
+
+        for(String key: columnNameValue.keySet()){
+            if(!colDataTypes.containsKey(key)){
+                throw new DBAppException("Column does not exist");
+            }
+            Class colClass = Class.forName(colDataTypes.get(key));
+            if(!colClass.isInstance(columnNameValue.get(key))){
+                throw new DBAppException("Incompatible data types");
+            }
+        }
+
+        for (String key: columnNameValue.keySet()){
+            switch (colDataTypes.get(key)){
+                case "java.lang.Integer":
+                    if(((Integer) columnNameValue.get(key)).compareTo((Integer) colMin.get(key)) < 0){
+                        throw new DBAppException("Value for column " + key + " is below the minimum allowed");
+                    }
+                    if(((Integer) columnNameValue.get(key)).compareTo((Integer) colMax.get(key)) > 0){
+                        throw new DBAppException("Value for column " + key + " is above the maximum allowed");
+                    }
+                    break;
+                case "java.lang.Double":
+                    if(((Double) columnNameValue.get(key)).compareTo((Double) colMin.get(key)) < 0){
+                        throw new DBAppException("Value for column " + key + " is below the minimum allowed");
+                    }
+                    if(((Double) columnNameValue.get(key)).compareTo((Double) colMax.get(key)) > 0){
+                        throw new DBAppException("Value for column " + key + " is above the maximum allowed");
+                    }
+                    break;
+                case "java.util.Date":
+                    if(((Date) columnNameValue.get(key)).compareTo((Date) colMin.get(key)) < 0){
+                        throw new DBAppException("Value for column " + key + " is below the minimum allowed");
+                    }
+                    if(((Date) columnNameValue.get(key)).compareTo((Date) colMax.get(key)) > 0){
+                        throw new DBAppException("Value for column " + key + " is above the maximum allowed");
+                    }
+                    break;
+                default:
+                    if(((String) columnNameValue.get(key)).compareTo((String) colMin.get(key)) < 0){
+                        throw new DBAppException("Value for column " + key + " is below the minimum allowed");
+                    }
+                    if(((String) columnNameValue.get(key)).compareTo((String) colMax.get(key)) > 0){
+                        throw new DBAppException("Value for column " + key + " is above the maximum allowed");
+                    }
+                    break;
+            }
+        }
+        return clusteringObject;
+    }
+
 
     public static void main(String[] args) throws DBAppException {
-        String strTableName = "Student";
-        DBApp dbApp = new DBApp();
-        Hashtable htblColNameType = new Hashtable();
-        htblColNameType.put("id", "java.lang.Integer");
-        htblColNameType.put("name", "java.lang.String");
-        htblColNameType.put("gpa", "java.lang.double");
-
-        Hashtable htblColName = new Hashtable();
-
-        htblColName.put("id", "0");
-        htblColName.put("name", "0");
-        htblColName.put("gpa", "0");
-
-        Hashtable<String, String> ht = new Hashtable();
-        ht.put("id", "1000");
-        ht.put("name", "1000");
-        ht.put("gpa", "10000");
-
-
-        //dbApp.createTable( strTableName, "id", htblColNameType,htblColName,ht);
-
 
     }
 }

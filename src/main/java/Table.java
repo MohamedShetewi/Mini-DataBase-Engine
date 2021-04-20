@@ -3,14 +3,12 @@ import java.util.Vector;
 
 public class Table implements Serializable {
    private String tableName;
-   private Vector<Integer> minPrimaryKey;
-   private Vector<Integer> maxPrimaryKey;
+   private Vector<Page> pages;
 
     public Table(String tableName)
     {
         this.tableName = tableName;
-        minPrimaryKey = new Vector<>();
-        maxPrimaryKey = new Vector<>();
+        pages = new Vector<>();
     }
 
     public String getTableName() {
@@ -21,19 +19,11 @@ public class Table implements Serializable {
         this.tableName = tableName;
     }
 
-    public Vector<Integer> getMinPrimaryKey() {
-        return minPrimaryKey;
+    public Vector<Page> getPages() {
+        return pages;
     }
 
-    public void setMinPrimaryKey(Vector<Integer> minPrimaryKey) {
-        this.minPrimaryKey = minPrimaryKey;
-    }
-
-    public Vector<Integer> getMaxPrimaryKey() {
-        return maxPrimaryKey;
-    }
-
-    public void setMaxPrimaryKey(Vector<Integer> maxPrimaryKey) {
-        this.maxPrimaryKey = maxPrimaryKey;
+    public void setPages(Vector<Page> pages) {
+        this.pages = pages;
     }
 }
