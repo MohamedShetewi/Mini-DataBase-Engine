@@ -123,6 +123,7 @@ public class DBApp implements DBAppInterface {
             throw new DBAppException("There is no such table in the Data Base.");
         }
         validateRecord(tableCols, colNameValue);
+
     }
 
     @Override
