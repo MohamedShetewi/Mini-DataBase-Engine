@@ -95,7 +95,8 @@ public class DBApp implements DBAppInterface {
 
     @Override
     public void insertIntoTable(String tableName, Hashtable<String, Object> colNameValue) throws DBAppException, IOException, ParseException {
-        //Check the table exists and the row is of the correct types (from metadata file)
+        //1- Check the table exists and the input record is valid.
+
         boolean found = false;
         ArrayList<String[]> tableCols = new ArrayList<>();
         try {
@@ -121,7 +122,6 @@ public class DBApp implements DBAppInterface {
         if (!found) {
             throw new DBAppException("There is no such table in the Data Base.");
         }
-
         validateRecord(tableCols, colNameValue);
     }
 
@@ -135,36 +135,36 @@ public class DBApp implements DBAppInterface {
         Hashtable<String, String> colDataTypes = new Hashtable<>();
         String clusteringType = "";
 
-        while((curLine = br.readLine()) != null){
+        while ((curLine = br.readLine()) != null) {
             String[] res = curLine.split(",");
-            if(res[0].equals(tableName)){
+            if (res[0].equals(tableName)) {
                 colDataTypes.put(res[1], res[2]);
-                if(res[3].equals("True")){
+                if (res[3].equals("True")) {
                     clusteringType = res[2];
                 }
             }
         }
 
         Object clusteringObject;
-        switch (clusteringType){
+        switch (clusteringType) {
             case "java.lang.Integer":
                 try {
                     clusteringObject = Integer.parseInt(clusteringKeyValue);
-                }catch (NumberFormatException e){
+                } catch (NumberFormatException e) {
                     throw new DBAppException("Incompatible clustering key data type");
                 }
                 break;
             case "java.lang.Double":
                 try {
                     clusteringObject = Double.parseDouble(clusteringKeyValue);
-                }catch (NumberFormatException e){
+                } catch (NumberFormatException e) {
                     throw new DBAppException("Incompatible clustering key data type");
                 }
                 break;
             case "java.util.Date":
                 try {
                     clusteringObject = new SimpleDateFormat("YYYY-MM-DD").parse(clusteringKeyValue);
-                }catch (ParseException e){
+                } catch (ParseException e) {
                     throw new DBAppException("Incompatible clustering key data type");
                 }
                 break;
@@ -173,9 +173,9 @@ public class DBApp implements DBAppInterface {
                 break;
         }
 
-        for(String key: columnNameValue.keySet()){
+        for (String key : columnNameValue.keySet()) {
             Class colClass = Class.forName(colDataTypes.get(key));
-            if(!colClass.isInstance(columnNameValue.get(key))){
+            if (!colClass.isInstance(columnNameValue.get(key))) {
                 throw new DBAppException("Incompatible data types");
             }
         }
@@ -193,11 +193,21 @@ public class DBApp implements DBAppInterface {
     }
 
     private static void validateRecord(ArrayList<String[]> tableCols, Hashtable<String, Object> colNameValue) throws DBAppException, ParseException {
-        //still need to check primary key exists
-        //still need to check the input include all the fields
+        //complete.
+        //The method checks for the following
+        //The input record include (exactly) all the fields of the table.
+        //The input record's values are of the right types as the table in the metadata.
+        //The input record's values are in the range between their min and max values.
+
+        if (colNameValue.size() != tableCols.size())
+            throw new DBAppException("The record is not valid.\nAll fields must be included");
 
         for (String[] record : tableCols) {
             boolean valid = true;
+
+            if (!colNameValue.containsKey(record[1]))
+                throw new DBAppException("The field " + record[1] + "is not in the record" + ".\nAll fields must be included");
+
             Class c = colNameValue.get(record[1]).getClass();
             if ((c.getName()).equals(record[2])) {
                 if (c.getName().equals("java.lang.Integer")) {
