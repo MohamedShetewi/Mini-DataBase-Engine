@@ -157,6 +157,8 @@ public class DBApp implements DBAppInterface {
         Vector<Page> tablePages = targetTable.getPages();
         Vector<Hashtable<String, Object>> queryResult = new Vector<>();
         for (Page page : tablePages) {
+            if (page.getNumOfRecords() == 0)
+                continue;
             serializedFile = new FileInputStream(page.getPath());
             in = new ObjectInputStream(serializedFile);
             Vector<Hashtable<String, Object>> rows = (Vector<Hashtable<String, Object>>) in.readObject();
