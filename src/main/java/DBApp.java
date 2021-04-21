@@ -345,12 +345,22 @@ public class DBApp implements DBAppInterface {
         serializedFile.close();
 
         if (term.getOperator().equals("=")) {
-            for (Hashtable<String, Object> row : targetPageRows)
-                if (booleanValueOfTerm(row, term)) {
-                    result.add(row);
-                    return result;
+            lo=0;
+            hi=targetPageRows.size()-1;
+            while (lo <= hi) {
+                int mid = (lo+hi) /2;
+                Hashtable<String, Object> curRow = targetPageRows.get(mid);
+                if (booleanValueOfTerm(curRow, term)){
+                    result.add(curRow);
+                    break;
                 }
-            return null;
+                if (term.compareTo(curRow.get(term.getColumnName())) < 0)
+                    hi = mid-1;
+                else
+                    lo = mid+1;
+            }
+
+            return result;
         }
 
         Vector<Page> pagesBeforeTarget = new Vector<>();
