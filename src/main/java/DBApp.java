@@ -5,7 +5,6 @@ import java.util.*;
 import java.text.DateFormat;
 
 
-
 public class DBApp implements DBAppInterface {
     @Override
     public void init() {
@@ -126,16 +125,85 @@ public class DBApp implements DBAppInterface {
     public void updateTable(String tableName, String clusteringKeyValue,
                             Hashtable<String, Object> columnNameValue)
             throws DBAppException, IOException, ClassNotFoundException, ParseException {
-        Object clusteringObject = validateUpdateInput(tableName, clusteringKeyValue, columnNameValue);
-
+        Object[] clusteringInfo = validateUpdateInput(tableName, clusteringKeyValue, columnNameValue);
+        String clusteringCol = (String) clusteringInfo[0];
+        Object clusteringObject = clusteringInfo[1];
         FileInputStream fileIn = new FileInputStream("src/main/resources/Tables/" + tableName + ".ser");
         ObjectInputStream in = new ObjectInputStream(fileIn);
         Table t = (Table) in.readObject();
         in.close();
         fileIn.close();
 
+        int pageIdx = searchForPage(t.getPages(), clusteringObject);
+        if (pageIdx == -1) {
+            throw new DBAppException("Invalid clustering key value");
+        }
+        FileInputStream pageFileIn = new FileInputStream(t.getPages().get(pageIdx).getPath());
+        ObjectInputStream pageIn = new ObjectInputStream(pageFileIn);
+        Vector<Hashtable<String, Object>> page = (Vector<Hashtable<String, Object>>) pageIn.readObject();
+        pageIn.close();
+        pageFileIn.close();
+
+        int rowIdx = searchInsidePage(page, clusteringObject, clusteringCol);
+        if (rowIdx == -1) {
+            throw new DBAppException("Invalid clustering key value");
+        }
+        for (String key : columnNameValue.keySet()) {
+            page.get(rowIdx).replace(key, columnNameValue.get(key));
+        }
+
+        FileOutputStream pageFileOut = new FileOutputStream(t.getPages().get(pageIdx).getPath());
+        ObjectOutputStream pageOut = new ObjectOutputStream(pageFileOut);
+        pageOut.writeObject(page);
+        pageOut.close();
+        pageFileOut.close();
 
 
+    }
+
+    private int searchForPage(Vector<Page> pages, Object clusteringObject) {
+        int lo = 0;
+        int hi = pages.size() - 1;
+        while (lo <= hi) {
+            int mid = (lo + hi) / 2;
+            if (compareClusteringValues(clusteringObject, pages.get(mid).getMinClusteringValue()) >= 0
+                    && compareClusteringValues(clusteringObject, pages.get(mid).getMaxClusteringValue()) <= 0) {
+                return mid;
+            } else if (compareClusteringValues(clusteringObject, pages.get(mid).getMinClusteringValue()) <= 0) {
+                hi = mid - 1;
+            } else {
+                lo = mid + 1;
+            }
+        }
+        return -1;
+    }
+
+    private int searchInsidePage(Vector<Hashtable<String, Object>> page, Object clusteringObject, String clusteringCol) {
+        int lo = 0;
+        int hi = page.size() - 1;
+        while (lo <= hi) {
+            int mid = (lo + hi) / 2;
+            if (compareClusteringValues(clusteringObject, page.get(mid).get(clusteringCol)) == 0) {
+                return mid;
+            } else if (compareClusteringValues(clusteringObject, page.get(mid).get(clusteringCol)) < 0) {
+                hi = mid - 1;
+            } else {
+                lo = mid + 1;
+            }
+        }
+        return -1;
+    }
+
+    private int compareClusteringValues(Object clusteringObject1, Object clusteringObject2) {
+        if (clusteringObject1 instanceof java.lang.Integer) {
+            return ((Integer) clusteringObject1).compareTo((Integer) clusteringObject2);
+        } else if (clusteringObject1 instanceof java.lang.Double) {
+            return ((Double) clusteringObject1).compareTo((Double) clusteringObject2);
+        } else if (clusteringObject1 instanceof java.util.Date) {
+            return ((Date) clusteringObject1).compareTo((Date) clusteringObject2);
+        } else {
+            return ((String) clusteringObject1).compareTo((String) clusteringObject2);
+        }
     }
 
     @Override
@@ -199,21 +267,21 @@ public class DBApp implements DBAppInterface {
         }
     }
 
-    private Object validateUpdateInput(String tableName, String clusteringKeyValue,
-                                     Hashtable<String, Object> columnNameValue) throws IOException, ParseException, DBAppException, ClassNotFoundException {
+    private Object[] validateUpdateInput(String tableName, String clusteringKeyValue,
+                                         Hashtable<String, Object> columnNameValue) throws IOException, ParseException, DBAppException, ClassNotFoundException {
         FileReader metadata = new FileReader("src/main/resources/metadata.csv");
         BufferedReader br = new BufferedReader(metadata);
         String curLine = "";
         Hashtable<String, String> colDataTypes = new Hashtable<>();
         Hashtable<String, Object> colMin = new Hashtable<>();
         Hashtable<String, Object> colMax = new Hashtable<>();
-        String clusteringType = "";
+        String clusteringType = "", clusteringCol = "";
 
-        while((curLine = br.readLine()) != null){
+        while ((curLine = br.readLine()) != null) {
             String[] res = curLine.split(",");
-            if(res[0].equals(tableName)){
+            if (res[0].equals(tableName)) {
                 colDataTypes.put(res[1], res[2]);
-                switch (res[2]){
+                switch (res[2]) {
                     case "java.lang.Integer":
                         colMin.put(res[1], Integer.parseInt(res[5]));
                         colMax.put(res[1], Integer.parseInt(res[6]));
@@ -231,32 +299,33 @@ public class DBApp implements DBAppInterface {
                         colMax.put(res[1], res[6]);
                         break;
                 }
-                if(res[3].equals("True")){
+                if (res[3].equals("True")) {
                     clusteringType = res[2];
+                    clusteringCol = res[1];
                 }
             }
         }
 
         Object clusteringObject;
-        switch (clusteringType){
+        switch (clusteringType) {
             case "java.lang.Integer":
                 try {
                     clusteringObject = Integer.parseInt(clusteringKeyValue);
-                }catch (NumberFormatException e){
+                } catch (NumberFormatException e) {
                     throw new DBAppException("Incompatible clustering key data type");
                 }
                 break;
             case "java.lang.Double":
                 try {
                     clusteringObject = Double.parseDouble(clusteringKeyValue);
-                }catch (NumberFormatException e){
+                } catch (NumberFormatException e) {
                     throw new DBAppException("Incompatible clustering key data type");
                 }
                 break;
             case "java.util.Date":
                 try {
                     clusteringObject = new SimpleDateFormat("YYYY-MM-DD").parse(clusteringKeyValue);
-                }catch (ParseException e){
+                } catch (ParseException e) {
                     throw new DBAppException("Incompatible clustering key data type");
                 }
                 break;
@@ -265,57 +334,58 @@ public class DBApp implements DBAppInterface {
                 break;
         }
 
-        for(String key: columnNameValue.keySet()){
-            if(!colDataTypes.containsKey(key)){
+        for (String key : columnNameValue.keySet()) {
+            if (!colDataTypes.containsKey(key)) {
                 throw new DBAppException("Column does not exist");
             }
             Class colClass = Class.forName(colDataTypes.get(key));
-            if(!colClass.isInstance(columnNameValue.get(key))){
+            if (!colClass.isInstance(columnNameValue.get(key))) {
                 throw new DBAppException("Incompatible data types");
             }
         }
 
-        for (String key: columnNameValue.keySet()){
-            switch (colDataTypes.get(key)){
+        for (String key : columnNameValue.keySet()) {
+            switch (colDataTypes.get(key)) {
                 case "java.lang.Integer":
-                    if(((Integer) columnNameValue.get(key)).compareTo((Integer) colMin.get(key)) < 0){
+                    if (((Integer) columnNameValue.get(key)).compareTo((Integer) colMin.get(key)) < 0) {
                         throw new DBAppException("Value for column " + key + " is below the minimum allowed");
                     }
-                    if(((Integer) columnNameValue.get(key)).compareTo((Integer) colMax.get(key)) > 0){
+                    if (((Integer) columnNameValue.get(key)).compareTo((Integer) colMax.get(key)) > 0) {
                         throw new DBAppException("Value for column " + key + " is above the maximum allowed");
                     }
                     break;
                 case "java.lang.Double":
-                    if(((Double) columnNameValue.get(key)).compareTo((Double) colMin.get(key)) < 0){
+                    if (((Double) columnNameValue.get(key)).compareTo((Double) colMin.get(key)) < 0) {
                         throw new DBAppException("Value for column " + key + " is below the minimum allowed");
                     }
-                    if(((Double) columnNameValue.get(key)).compareTo((Double) colMax.get(key)) > 0){
+                    if (((Double) columnNameValue.get(key)).compareTo((Double) colMax.get(key)) > 0) {
                         throw new DBAppException("Value for column " + key + " is above the maximum allowed");
                     }
                     break;
                 case "java.util.Date":
-                    if(((Date) columnNameValue.get(key)).compareTo((Date) colMin.get(key)) < 0){
+                    if (((Date) columnNameValue.get(key)).compareTo((Date) colMin.get(key)) < 0) {
                         throw new DBAppException("Value for column " + key + " is below the minimum allowed");
                     }
-                    if(((Date) columnNameValue.get(key)).compareTo((Date) colMax.get(key)) > 0){
+                    if (((Date) columnNameValue.get(key)).compareTo((Date) colMax.get(key)) > 0) {
                         throw new DBAppException("Value for column " + key + " is above the maximum allowed");
                     }
                     break;
                 default:
-                    if(((String) columnNameValue.get(key)).compareTo((String) colMin.get(key)) < 0){
+                    if (((String) columnNameValue.get(key)).compareTo((String) colMin.get(key)) < 0) {
                         throw new DBAppException("Value for column " + key + " is below the minimum allowed");
                     }
-                    if(((String) columnNameValue.get(key)).compareTo((String) colMax.get(key)) > 0){
+                    if (((String) columnNameValue.get(key)).compareTo((String) colMax.get(key)) > 0) {
                         throw new DBAppException("Value for column " + key + " is above the maximum allowed");
                     }
                     break;
             }
         }
-        return clusteringObject;
+        return new Object[]{clusteringCol, clusteringObject};
     }
 
 
-    public static void main(String[] args) throws DBAppException {
+    public static void main(String[] args) throws DBAppException, IOException, ClassNotFoundException {
 
     }
+
 }
