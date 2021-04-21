@@ -44,8 +44,6 @@ public class DBApp implements DBAppInterface {
             out.close();
             serializedFile.close();
 
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -59,7 +57,7 @@ public class DBApp implements DBAppInterface {
             BufferedReader br = new BufferedReader(oldMetaDataFile);
             StringBuilder tableMetaData = new StringBuilder();
 
-            String curLine = "";
+            String curLine;
             while ((curLine = br.readLine()) != null)
                 tableMetaData.append(curLine);
 
@@ -67,19 +65,18 @@ public class DBApp implements DBAppInterface {
 
             FileWriter metaDataFile = new FileWriter("src/main/resources/metadata.csv");
             for (String colName : colNameType.keySet()) {
-                tableMetaData.append(tableName + ",");
-                tableMetaData.append(colName + ",");
-                tableMetaData.append(colNameType.get(colName) + ",");
-                tableMetaData.append((colName.equals(clusteringKey) ? "True" : "False") + ",");
+                tableMetaData.append(tableName).append(",");
+                tableMetaData.append(colName).append(",");
+                tableMetaData.append(colNameType.get(colName)).append(",");
+                tableMetaData.append(colName.equals(clusteringKey) ? "True" : "False").append(",");
                 tableMetaData.append("False,");
-                tableMetaData.append(colNameMin.get(colName) + ",");
+                tableMetaData.append(colNameMin.get(colName)).append(",");
                 tableMetaData.append(colNameMax.get(colName));
                 tableMetaData.append("\n");
             }
             metaDataFile.write(tableMetaData.toString());
             metaDataFile.close();
-        } catch (IOException e) {
-
+        } catch (IOException ignored) {
         }
     }
 
@@ -89,7 +86,7 @@ public class DBApp implements DBAppInterface {
     }
 
     @Override
-    public void insertIntoTable(String tableName, Hashtable<String, Object> colNameValue) throws DBAppException, IOException, ParseException, ClassNotFoundException {
+    public void insertIntoTable(String tableName, Hashtable<String, Object> colNameValue) throws DBAppException, IOException, ParseException {
         //1- Check the table exists and the input record is valid.
 
         boolean found = false;
@@ -112,42 +109,96 @@ public class DBApp implements DBAppInterface {
                 }
             }
         } catch (IOException e) {
-            System.out.println(e.getMessage());
+            e.getMessage();
         }
         if (!found) {
-            throw new DBAppException("There is no such table in the Data Base.");
+            throw new DBAppException("There is no such table in the Database.");
         }
-        String primaryKey = validateInsertRecord(tableCols, colNameValue);
 
-        //Deserialize the table and get its pages
-        try {
-            FileInputStream fileIn = new FileInputStream("src/main/resources/" + tableName + ".ser");
-            ObjectInputStream objectIn = new ObjectInputStream(fileIn);
-            Table table = (Table) objectIn.readObject();
-            objectIn.close();
-            fileIn.close();
-            Vector<Page> pages = table.getPages();
-            String type = colNameValue.get(primaryKey).getClass().getName();
-
-
-        }catch (ClassNotFoundException e){
-            System.out.println(e.getMessage());
-        }
+        validateRecord(tableCols, colNameValue);
     }
 
     @Override
     public void updateTable(String tableName, String clusteringKeyValue,
                             Hashtable<String, Object> columnNameValue)
             throws DBAppException, IOException, ClassNotFoundException, ParseException {
-        Object clusteringObject = validateUpdateInput(tableName, clusteringKeyValue, columnNameValue);
-
+        Object[] clusteringInfo = validateUpdateInput(tableName, clusteringKeyValue, columnNameValue);
+        String clusteringCol = (String) clusteringInfo[0];
+        Object clusteringObject = clusteringInfo[1];
         FileInputStream fileIn = new FileInputStream("src/main/resources/Tables/" + tableName + ".ser");
         ObjectInputStream in = new ObjectInputStream(fileIn);
         Table t = (Table) in.readObject();
         in.close();
         fileIn.close();
 
+        int pageIdx = searchForPage(t.getPages(), clusteringObject);
+        if (pageIdx == -1) {
+            throw new DBAppException("Invalid clustering key value");
+        }
+        FileInputStream pageFileIn = new FileInputStream(t.getPages().get(pageIdx).getPath());
+        ObjectInputStream pageIn = new ObjectInputStream(pageFileIn);
+        Vector<Hashtable<String, Object>> page = (Vector<Hashtable<String, Object>>) pageIn.readObject();
+        pageIn.close();
+        pageFileIn.close();
 
+        int rowIdx = searchInsidePage(page, clusteringObject, clusteringCol);
+        if (rowIdx == -1) {
+            throw new DBAppException("Invalid clustering key value");
+        }
+        for (String key : columnNameValue.keySet()) {
+            page.get(rowIdx).replace(key, columnNameValue.get(key));
+        }
+
+        FileOutputStream pageFileOut = new FileOutputStream(t.getPages().get(pageIdx).getPath());
+        ObjectOutputStream pageOut = new ObjectOutputStream(pageFileOut);
+        pageOut.writeObject(page);
+        pageOut.close();
+        pageFileOut.close();
+    }
+
+    private int searchForPage(Vector<Page> pages, Object clusteringObject) {
+        int lo = 0;
+        int hi = pages.size() - 1;
+        while (lo <= hi) {
+            int mid = (lo + hi) / 2;
+            if (compareClusteringValues(clusteringObject, pages.get(mid).getMinClusteringValue()) >= 0
+                    && compareClusteringValues(clusteringObject, pages.get(mid).getMaxClusteringValue()) <= 0) {
+                return mid;
+            } else if (compareClusteringValues(clusteringObject, pages.get(mid).getMinClusteringValue()) <= 0) {
+                hi = mid - 1;
+            } else {
+                lo = mid + 1;
+            }
+        }
+        return -1;
+    }
+
+    private int searchInsidePage(Vector<Hashtable<String, Object>> page, Object clusteringObject, String clusteringCol) {
+        int lo = 0;
+        int hi = page.size() - 1;
+        while (lo <= hi) {
+            int mid = (lo + hi) / 2;
+            if (compareClusteringValues(clusteringObject, page.get(mid).get(clusteringCol)) == 0) {
+                return mid;
+            } else if (compareClusteringValues(clusteringObject, page.get(mid).get(clusteringCol)) < 0) {
+                hi = mid - 1;
+            } else {
+                lo = mid + 1;
+            }
+        }
+        return -1;
+    }
+
+    private int compareClusteringValues(Object clusteringObject1, Object clusteringObject2) {
+        if (clusteringObject1 instanceof java.lang.Integer) {
+            return ((Integer) clusteringObject1).compareTo((Integer) clusteringObject2);
+        } else if (clusteringObject1 instanceof java.lang.Double) {
+            return ((Double) clusteringObject1).compareTo((Double) clusteringObject2);
+        } else if (clusteringObject1 instanceof java.util.Date) {
+            return ((Date) clusteringObject1).compareTo((Date) clusteringObject2);
+        } else {
+            return ((String) clusteringObject1).compareTo((String) clusteringObject2);
+        }
     }
 
     @Override
@@ -156,71 +207,323 @@ public class DBApp implements DBAppInterface {
     }
 
     @Override
-    public Iterator selectFromTable(SQLTerm[] sqlTerms, String[] arrayOperators) throws DBAppException {
-        return null;
+    public Iterator selectFromTable(SQLTerm[] sqlTerms, String[] arrayOperators) throws IOException, DBAppException, ClassNotFoundException {
+        if (sqlTerms.length != arrayOperators.length - 1)
+            throw new DBAppException("Number of terms and operators does not match.");
+        String targetTableName = sqlTerms[0].getTableName();
+        validateArrayOperators(arrayOperators);
+        String clusteringColumnName = validateExistingTable(targetTableName);
+        validateTerms(sqlTerms);
+
+        // getting the table Object we want to select from
+        FileInputStream serializedFile = new FileInputStream("src/main/resources/Tables/" + targetTableName + ".ser");
+        ObjectInputStream in = new ObjectInputStream(serializedFile);
+        Table targetTable = (Table) in.readObject();
+        in.close();
+        serializedFile.close();
+        //
+        Vector<Page> tablePages = targetTable.getPages();
+        Stack<Vector<Hashtable<String, Object>>> termsSets = new Stack<>();
+        for (int i = sqlTerms.length - 1; i >= 0; i--) {
+            Vector<Hashtable<String, Object>> vector = isValidTerm(sqlTerms[i], tablePages, clusteringColumnName);
+            termsSets.add(vector);
+        }
+
+        for (String arrayOperator : arrayOperators) {
+            Vector<Hashtable<String, Object>> a = termsSets.pop();
+            Vector<Hashtable<String, Object>> b = termsSets.pop();
+
+            switch (arrayOperator) {
+                case "AND":
+                    Vector<Hashtable<String, Object>> aIntersectB = rowsIntersection(a, b, clusteringColumnName);
+                    termsSets.push(aIntersectB);
+                    break;
+                case "OR":
+                    Vector<Hashtable<String, Object>> aUnionB = rowsUnion(a, b, clusteringColumnName);
+                    termsSets.push(aUnionB);
+                    break;
+                case "XOR":
+                    Vector<Hashtable<String, Object>> aDiffB = rowsDifference(a, b, clusteringColumnName);
+                    Vector<Hashtable<String, Object>> bDiffA = rowsDifference(b, a, clusteringColumnName);
+                    Vector<Hashtable<String, Object>> aXorB = rowsUnion(aDiffB, bDiffA, clusteringColumnName);
+                    termsSets.push(aXorB);
+                    break;
+            }
+
+
+        }
+
+        Vector<Hashtable<String, Object>> queryResult;
+        queryResult = termsSets.pop();
+        return queryResult.iterator();
     }
 
-    private static String validateInsertRecord(ArrayList<String[]> tableCols, Hashtable<String, Object> colNameValue) throws DBAppException, ParseException {
+    private Vector<Hashtable<String, Object>> rowsUnion(Vector<Hashtable<String, Object>> a, Vector<Hashtable<String, Object>> b, String clusteringColumnName) {
+        Vector<Hashtable<String, Object>> resultOfUnion = new Vector<>();
+        resultOfUnion.addAll(a);
+        resultOfUnion.addAll(rowsDifference(b, a, clusteringColumnName));
+        return resultOfUnion;
+    }
+
+    private Vector<Hashtable<String, Object>> rowsDifference(Vector<Hashtable<String, Object>> a, Vector<Hashtable<String, Object>> b, String clusteringColumnName) {
+        Vector<Hashtable<String, Object>> resultOfDifference = new Vector<>();
+        for(Hashtable<String, Object> rowA: a){
+            for(Hashtable<String, Object> rowB: b){
+                if(!rowA.get(clusteringColumnName).equals(rowB.get(clusteringColumnName))){
+                    resultOfDifference.add(rowA);
+                }
+            }
+        }
+        return resultOfDifference;
+    }
+
+    private Vector<Hashtable<String, Object>> rowsIntersection(Vector<Hashtable<String, Object>> a, Vector<Hashtable<String, Object>> b, String clusteringColumnName) {
+        Vector<Hashtable<String, Object>> resultOfIntersection = new Vector<>();
+        for(Hashtable<String, Object> rowA: a){
+            for(Hashtable<String, Object> rowB: b){
+                if(rowA.get(clusteringColumnName).equals(rowB.get(clusteringColumnName))){
+                    resultOfIntersection.add(rowA);
+                }
+            }
+        }
+        return resultOfIntersection;
+    }
+
+
+    private void validateArrayOperators(String[] arrayOperators) throws DBAppException {
+        for (String operator : arrayOperators) {
+            if (!(operator.equals("OR") || operator.equals("AND") || operator.equals("XOR")))
+                throw new DBAppException("The operator is not correct");
+        }
+    }
+
+    private Vector<Hashtable<String, Object>> isValidTerm(SQLTerm term, Vector<Page> tablePages, String clusteringColumnName) throws IOException, ClassNotFoundException {
+        if (term.getColumnName().equals(clusteringColumnName))
+            return searchOnClustering(term, tablePages);
+        return searchLinearly(term, tablePages);
+
+    }
+
+    private Vector<Hashtable<String, Object>> searchLinearly(SQLTerm term, Vector<Page> tablePages) throws IOException, ClassNotFoundException {
+        Vector<Hashtable<String, Object>> result = new Vector<>();
+        for (Page page : tablePages) {
+            FileInputStream serializedFile = new FileInputStream(page.getPath());
+            ObjectInputStream in = new ObjectInputStream(serializedFile);
+            Vector<Hashtable<String, Object>> rows = (Vector<Hashtable<String, Object>>) in.readObject();
+            in.close();
+            serializedFile.close();
+
+            for (Hashtable<String, Object> row : rows)
+                if (booleanValueOfTerm(row, term))
+                    result.add(row);
+        }
+        return result;
+    }
+
+    private Vector<Hashtable<String, Object>> searchOnClustering(SQLTerm term, Vector<Page> tablePages) throws IOException, ClassNotFoundException {
+        Vector<Hashtable<String, Object>> result = new Vector<>();
+        int lo = 0;
+        int hi = tablePages.size() - 1;
+        Page targetPage = tablePages.get(0);
+        while (lo <= hi) {
+            int mid = (lo + hi) / 2;
+            Page curPage = tablePages.get(mid);
+            if (term.compareTo(curPage.getMinClusteringValue()) >= 0 && term.compareTo(curPage.getMaxClusteringValue()) <= 0) {
+                targetPage = curPage;
+                break;
+            }
+            if (term.compareTo(curPage.getMinClusteringValue()) < 0)
+                hi = mid - 1;
+            else
+                lo = mid + 1;
+        }
+
+        FileInputStream serializedFile = new FileInputStream(targetPage.getPath());
+        ObjectInputStream in = new ObjectInputStream(serializedFile);
+        Vector<Hashtable<String, Object>> targetPageRows = (Vector<Hashtable<String, Object>>) in.readObject();
+        in.close();
+        serializedFile.close();
+
+        if (term.getOperator().equals("=")) {
+            for (Hashtable<String, Object> row : targetPageRows)
+                if (booleanValueOfTerm(row, term)) {
+                    result.add(row);
+                    return result;
+                }
+            return null;
+        }
+
+        Vector<Page> pagesBeforeTarget = new Vector<>();
+        Vector<Page> pagesAfterTarget = new Vector<>();
+        for (Page page : tablePages) {
+            if (page.equals(targetPage))
+                break;
+            pagesBeforeTarget.add(page);
+        }
+        for (int i = tablePages.indexOf(targetPage) + 1; i < tablePages.size(); i++)
+            pagesAfterTarget.add(tablePages.get(i));
+
+        for (Hashtable<String, Object> row : targetPageRows)
+            if (booleanValueOfTerm(row, term))
+                result.add(row);
+
+        if (term.getOperator().equals("<") || term.getOperator().equals("<=")) {
+            addRowsOfPage(result, pagesBeforeTarget);
+        } else if (term.getOperator().equals(">") || term.getOperator().equals(">=")) {
+            addRowsOfPage(result, pagesAfterTarget);
+        } else {
+            addRowsOfPage(result, pagesBeforeTarget);
+            addRowsOfPage(result, pagesAfterTarget);
+        }
+        return result;
+
+    }
+
+    private void addRowsOfPage(Vector<Hashtable<String, Object>> result, Vector<Page> pages) throws IOException, ClassNotFoundException {
+        for (Page page : pages) {
+            FileInputStream fileInputStream = new FileInputStream(page.getPath());
+            ObjectInputStream objectInputStream = new ObjectInputStream(fileInputStream);
+            result.addAll((Vector<Hashtable<String, Object>>) objectInputStream.readObject());
+            objectInputStream.close();
+            fileInputStream.close();
+        }
+    }
+
+
+    private boolean booleanValueOfTerm(Hashtable<String, Object> row, SQLTerm term) {
+        switch (term.getOperator()) {
+            case "=":
+                return (term.compareTo(row.get(term.getColumnName())) == 0);
+            case "!=":
+                return (term.compareTo(row.get(term.getColumnName())) != 0);
+            case ">":
+                return (term.compareTo(row.get(term.getColumnName())) > 0);
+            case ">=":
+                return (term.compareTo(row.get(term.getColumnName())) >= 0);
+            case "<":
+                return (term.compareTo(row.get(term.getColumnName())) < 0);
+            case "<=":
+                return (term.compareTo(row.get(term.getColumnName())) <= 0);
+            default:
+                return false;
+        }
+    }
+
+
+    private String validateExistingTable(String targetTableName) throws IOException, DBAppException {
+        BufferedReader br = new BufferedReader(new FileReader("src/main/resources/metadata.csv"));
+        String curLine;
+        while (br.ready()) {
+            curLine = br.readLine();
+            String[] metaData = curLine.split(",");
+            if (metaData[0].equals(targetTableName)) {
+                if (metaData[3].equals("True")) {
+                    return metaData[1];
+                }
+            }
+        }
+        throw new DBAppException("There is no such table in the database.");
+    }
+
+    private void validateTerms(SQLTerm[] sqlTerms) throws IOException, DBAppException, ClassNotFoundException {
+        String targetTableName = sqlTerms[0].getTableName();
+        for (SQLTerm term : sqlTerms) {
+            if (!term.getColumnName().equals(targetTableName))
+                throw new DBAppException("The table name in all terms must be the same.");
+        }
+        FileReader metadata = new FileReader("src/main/resources/metadata.csv");
+        BufferedReader br = new BufferedReader(metadata);
+        String curLine;
+        Hashtable<String, String> colDataTypes = new Hashtable<>();
+        while ((curLine = br.readLine()) != null) {
+            String[] res = curLine.split(",");
+            if (res[0].equals(sqlTerms[0].getTableName())) {
+                colDataTypes.put(res[1], res[2]);
+            }
+        }
+        for (SQLTerm term : sqlTerms) {
+            String columnName = term.getColumnName();
+            Object columnValue = term.getValue();
+            if (!colDataTypes.containsKey(columnName)) {
+                throw new DBAppException("Column does not exist");
+            }
+            Class colClass = Class.forName(colDataTypes.get(columnName));
+            if (!colClass.isInstance(columnValue)) {
+                throw new DBAppException("Incompatible data types");
+            }
+
+        }
+    }
+
+
+    private static void validateRecord(ArrayList<String[]> tableCols, Hashtable<String, Object> colNameValue) throws DBAppException, ParseException {
         //complete.
         //The method checks for the following
-        //The primary key is in the input record.
+        //The input record include (exactly) all the fields of the table.
         //The input record's values are of the right types as the table in the metadata.
         //The input record's values are in the range between their min and max values.
-        boolean primarykeyExist = false;
-        String primaryKey = null;
+
+        if (colNameValue.size() != tableCols.size())
+            throw new DBAppException("The record is not valid.\nAll fields must be included");
+
         for (String[] record : tableCols) {
             boolean valid = true;
-            if (record[3].equals("True")) {
-                primarykeyExist = true;
-                primaryKey = record[1];
-            }
+
+            if (!colNameValue.containsKey(record[1]))
+                throw new DBAppException("The field " + record[1] + "is not in the record" + ".\nAll fields must be included");
+
             Class c = colNameValue.get(record[1]).getClass();
             if ((c.getName()).equals(record[2])) {
-                if (c.getName().equals("java.lang.Integer")) {
-                    int min = Integer.parseInt(record[5]);
-                    int max = Integer.parseInt(record[6]);
-                    if (!((int) colNameValue.get(record[1]) >= min && (int) colNameValue.get(record[1]) <= max))
-                        valid = false;
-                } else if (c.getName().equals("java.lang.String")) {
-                    String min = record[5];
-                    String max = record[6];
-                    if (!(((String) colNameValue.get(record[1])).compareTo(min) >= 0 && ((String) colNameValue.get(record[1])).compareTo(max) <= 0))
-                        valid = false;
-                } else if (c.getName().equals("java.lang.String.Double")) {
-                    double min = Double.parseDouble(record[5]);
-                    double max = Double.parseDouble(record[6]);
-                    if (!((double) colNameValue.get(record[1]) >= min && (double) colNameValue.get(record[1]) <= max))
-                        valid = false;
-                } else {
-                    try {
-                        DateFormat format = new SimpleDateFormat("yyyy-mm-dd");
-                        Date min = format.parse(record[5]);
-                        Date max = format.parse(record[6]);
-                        if (!(format.parse((String) colNameValue.get(record[1])).compareTo(min) >= 0 && format.parse((String) colNameValue.get(record[1])).compareTo(max) <= 0))
+                switch (c.getName()) {
+                    case "java.lang.Integer": {
+                        int min = Integer.parseInt(record[5]);
+                        int max = Integer.parseInt(record[6]);
+                        if (!((int) colNameValue.get(record[1]) >= min && (int) colNameValue.get(record[1]) <= max))
                             valid = false;
-                    } catch (ParseException e) {
-                        e.getMessage();
+                        break;
                     }
+                    case "java.lang.String": {
+                        String min = record[5];
+                        String max = record[6];
+                        if (!(((String) colNameValue.get(record[1])).compareTo(min) >= 0 && ((String) colNameValue.get(record[1])).compareTo(max) <= 0))
+                            valid = false;
+                        break;
+                    }
+                    case "java.lang.String.Double": {
+                        double min = Double.parseDouble(record[5]);
+                        double max = Double.parseDouble(record[6]);
+                        if (!((double) colNameValue.get(record[1]) >= min && (double) colNameValue.get(record[1]) <= max))
+                            valid = false;
+                        break;
+                    }
+                    default:
+                        try {
+                            DateFormat format = new SimpleDateFormat("yyyy-MM-dd");
+                            Date min = format.parse(record[5]);
+                            Date max = format.parse(record[6]);
+                            if (!(format.parse((String) colNameValue.get(record[1])).compareTo(min) >= 0 && format.parse((String) colNameValue.get(record[1])).compareTo(max) <= 0))
+                                valid = false;
+                        } catch (ParseException e) {
+                            e.getMessage();
+                        }
+                        break;
                 }
                 if (!valid)
                     throw new DBAppException("The value of the field " + record[1] + " is not in the range.\nThe value should be between " + record[5] + " and " + record[6]);
             } else
                 throw new DBAppException("The value of the field " + record[1] + " is incompatible.\nThe value should be an instance of " + record[2] + ".");
         }
-        if (!primarykeyExist)
-            throw new DBAppException("The primary key must be included in the record.");
-        return primaryKey;
     }
 
-    private Object validateUpdateInput(String tableName, String clusteringKeyValue,
-                                       Hashtable<String, Object> columnNameValue) throws IOException, ParseException, DBAppException, ClassNotFoundException {
+    private Object[] validateUpdateInput(String tableName, String clusteringKeyValue,
+                                         Hashtable<String, Object> columnNameValue) throws IOException, ParseException, DBAppException, ClassNotFoundException {
         FileReader metadata = new FileReader("src/main/resources/metadata.csv");
         BufferedReader br = new BufferedReader(metadata);
-        String curLine = "";
+        String curLine;
         Hashtable<String, String> colDataTypes = new Hashtable<>();
         Hashtable<String, Object> colMin = new Hashtable<>();
         Hashtable<String, Object> colMax = new Hashtable<>();
-        String clusteringType = "";
+        String clusteringType = "", clusteringCol = "";
 
         while ((curLine = br.readLine()) != null) {
             String[] res = curLine.split(",");
@@ -236,8 +539,8 @@ public class DBApp implements DBAppInterface {
                         colMax.put(res[1], Double.parseDouble(res[6]));
                         break;
                     case "java.util.Date":
-                        colMin.put(res[1], new SimpleDateFormat("YYYY-MM-DD").parse(res[5]));
-                        colMax.put(res[1], new SimpleDateFormat("YYYY-MM-DD").parse(res[6]));
+                        colMin.put(res[1], new SimpleDateFormat("yyyy-MM-dd").parse(res[5]));
+                        colMax.put(res[1], new SimpleDateFormat("yyyy-MM-dd").parse(res[6]));
                         break;
                     default:
                         colMin.put(res[1], res[5]);
@@ -246,6 +549,7 @@ public class DBApp implements DBAppInterface {
                 }
                 if (res[3].equals("True")) {
                     clusteringType = res[2];
+                    clusteringCol = res[1];
                 }
             }
         }
@@ -268,7 +572,7 @@ public class DBApp implements DBAppInterface {
                 break;
             case "java.util.Date":
                 try {
-                    clusteringObject = new SimpleDateFormat("YYYY-MM-DD").parse(clusteringKeyValue);
+                    clusteringObject = new SimpleDateFormat("yyyy-MM-dd").parse(clusteringKeyValue);
                 } catch (ParseException e) {
                     throw new DBAppException("Incompatible clustering key data type");
                 }
@@ -324,7 +628,7 @@ public class DBApp implements DBAppInterface {
                     break;
             }
         }
-        return clusteringObject;
+        return new Object[]{clusteringCol, clusteringObject};
     }
 
 
