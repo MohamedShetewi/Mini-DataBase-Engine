@@ -5,6 +5,7 @@ import java.util.*;
 import java.text.DateFormat;
 
 
+
 public class DBApp implements DBAppInterface {
     @Override
     public void init() {
@@ -115,7 +116,7 @@ public class DBApp implements DBAppInterface {
             e.getMessage();
         }
         if (!found) {
-            throw new DBAppException("There is no such table in the Data Base.");
+            throw new DBAppException("There is no such table in the Database.");
         }
 
         validateRecord(tableCols, colNameValue);
@@ -212,9 +213,218 @@ public class DBApp implements DBAppInterface {
     }
 
     @Override
-    public Iterator selectFromTable(SQLTerm[] sqlTerms, String[] arrayOperators) throws DBAppException {
-        return null;
+    public Iterator selectFromTable(SQLTerm[] sqlTerms, String[] arrayOperators) throws IOException, DBAppException, ClassNotFoundException {
+        if (sqlTerms.length != arrayOperators.length - 1)
+            throw new DBAppException("Number of terms and operators does not match.");
+        String targetTableName = sqlTerms[0].getTableName();
+        validatAarrayOperators(arrayOperators);
+        String clustringColumnName = validateExcitingTable(targetTableName);
+        validateTerms(sqlTerms);
+
+        // getting the table Object we want to select from
+        FileInputStream serializedFile = new FileInputStream("src/main/resources/Tables/" + targetTableName + ".ser");
+        ObjectInputStream in = new ObjectInputStream(serializedFile);
+        Table targetTable = (Table) in.readObject();
+        in.close();
+        serializedFile.close();
+        //
+        Vector<Page> tablePages = targetTable.getPages();
+        Queue<Set> termsSets = new LinkedList<>();
+        for (SQLTerm term : sqlTerms) {
+            Set<Hashtable<String, Object>> set = isValidTerm(term, tablePages, clustringColumnName);
+            termsSets.add(set);
+        }
+
+        for (int i=0;i<arrayOperators.length;i++){
+            Set<Hashtable<String, Object>> A = termsSets.poll();
+            Set<Hashtable<String, Object>> B = termsSets.poll();
+
+            if (arrayOperators[i].equals("AND")){
+                Set<Hashtable<String, Object>> AintersectB = new TreeSet<>(A);
+                AintersectB.retainAll(B);
+                termsSets.add(AintersectB);
+            }
+            else if (arrayOperators[i].equals("OR")){
+                Set<Hashtable<String, Object>> AunionB = new TreeSet<>(A);
+                AunionB.addAll(B);
+                termsSets.add(AunionB);
+            }
+            else if (arrayOperators[i].equals("XOR")){
+                Set<Hashtable<String, Object>> AdiffB = new TreeSet<>(A);
+                Set<Hashtable<String, Object>> BdiffA = new TreeSet<>(B);
+                AdiffB.removeAll(B);
+                BdiffA.removeAll(A);
+                Set<Hashtable<String, Object>> AxorB = new TreeSet<>(AdiffB);
+                AxorB.addAll(BdiffA);
+                termsSets.add(AxorB);
+            }
+        }
+
+        Set<Hashtable<String, Object>> queryResult = new TreeSet<>();
+        queryResult = termsSets.poll();
+        return queryResult.iterator();
     }
+
+    private void validatAarrayOperators(String[] arrayOperators) throws DBAppException {
+        for (String opearator:arrayOperators){
+            if (!(opearator.equals("OR") || opearator.equals("AND") || opearator.equals("XOR")))
+                throw new DBAppException("The operator is not correct");
+        }
+    }
+
+    private TreeSet<Hashtable<String, Object>> isValidTerm(SQLTerm term, Vector<Page> tablePages, String culstringColumnName) throws IOException, ClassNotFoundException {
+        if (term.getColumnName().equals(culstringColumnName))
+            return searchOnClustring(term, tablePages);
+        return searchLinearly(term,tablePages);
+
+    }
+
+    private TreeSet<Hashtable<String, Object>> searchLinearly(SQLTerm term, Vector<Page> tablePages) throws IOException, ClassNotFoundException {
+        TreeSet<Hashtable<String,Object>> result = new TreeSet<>();
+        for (Page page:tablePages){
+            FileInputStream serializedFile = new FileInputStream(page.getPath());
+            ObjectInputStream in = new ObjectInputStream(serializedFile);
+            Vector<Hashtable<String, Object>> rows = (Vector<Hashtable<String, Object>>) in.readObject();
+            in.close();
+            serializedFile.close();
+
+            for (Hashtable<String, Object> row : rows)
+                if (booleanValueOfTerm(row,term))
+                    result.add(row);
+        }
+        return result;
+    }
+
+    private TreeSet<Hashtable<String, Object>> searchOnClustring(SQLTerm term, Vector<Page> tablePages) throws IOException, ClassNotFoundException {
+        TreeSet<Hashtable<String,Object>> result = new TreeSet<>();
+        int lo = 0;
+        int hi = tablePages.size() - 1;
+        Page targetPage = tablePages.get(0);
+        while (lo <= hi) {
+            int mid = (lo + hi) / 2;
+            Page curPage = tablePages.get(mid);
+            if (term.compareTo(curPage.getMinClusteringValue()) >= 0 && term.compareTo(curPage.getMaxClusteringValue()) <= 0) {
+                targetPage = curPage;
+                break;
+            }
+            if (term.compareTo(curPage.getMinClusteringValue()) < 0)
+                hi = mid - 1;
+            else
+                lo = mid + 1;
+        }
+
+        FileInputStream serializedFile = new FileInputStream(targetPage.getPath());
+        ObjectInputStream in = new ObjectInputStream(serializedFile);
+        Vector<Hashtable<String, Object>> targetPageRows = (Vector<Hashtable<String, Object>>) in.readObject();
+        in.close();
+        serializedFile.close();
+
+        if (term.getOperator().equals("=")) {
+            for (Hashtable<String, Object> row : targetPageRows)
+                if (booleanValueOfTerm(row,term)){
+                    result.add(row);
+                    return result;
+                }
+            return null;
+        }
+
+        Set<Hashtable<String,Object>> pagesBeforeTarget = new TreeSet<>();
+        Set<Hashtable<String,Object>> pagesAfterTarget = new TreeSet<>();
+        for (Page page:tablePages){
+            if (page.equals(targetPage))
+                break;
+            TreeSet<Hashtable<String,Object>> set = new TreeSet<Hashtable<String,Object>>((SortedSet<Hashtable<String, Object>>) page);
+            pagesBeforeTarget.addAll(set);
+        }
+        for (int i =tablePages.indexOf(targetPage)+1;i<tablePages.size();i++){
+            TreeSet<Hashtable<String,Object>> set = new TreeSet<Hashtable<String,Object>>((SortedSet<Hashtable<String, Object>>) tablePages.get(i));
+            pagesAfterTarget.addAll(set);
+        }
+        for (Hashtable<String, Object> row : targetPageRows){
+            if (booleanValueOfTerm(row,term))
+                result.add(row);
+        }
+        if (term.getOperator().equals("<") || term.getOperator().equals("<="))
+            result.addAll(pagesBeforeTarget);
+        else if (term.getOperator().equals(">") || term.getOperator().equals(">="))
+            result.addAll(pagesAfterTarget);
+        else {
+            result.addAll(pagesAfterTarget);
+            result.addAll(pagesBeforeTarget);
+        }
+        return result;
+
+    }
+
+
+
+    private boolean booleanValueOfTerm(Hashtable<String, Object> row, SQLTerm term) {
+        switch (term.getOperator()) {
+            case "=":
+                return (term.compareTo(row.get(term.getColumnName())) == 0 ? true : false);
+            case "!=":
+                return (term.compareTo(row.get(term.getColumnName())) != 0 ? true : false);
+            case ">":
+                return (term.compareTo(row.get(term.getColumnName())) > 0 ? true : false);
+            case ">=":
+                return (term.compareTo(row.get(term.getColumnName())) >= 0 ? true : false);
+            case "<":
+                return (term.compareTo(row.get(term.getColumnName())) < 0 ? true : false);
+            case "<=":
+                return (term.compareTo(row.get(term.getColumnName())) <= 0 ? true : false);
+            default:
+                return false;
+        }
+    }
+
+
+    private String validateExcitingTable(String targetTableName) throws IOException, DBAppException {
+        BufferedReader br = new BufferedReader(new FileReader("src/main/resources/metadata.csv"));
+        String curLine;
+        boolean found = false;
+        while (br.ready()) {
+            curLine = br.readLine();
+            String[] metaData = curLine.split(",");
+            if (metaData[0].equals(targetTableName)) {
+                found = true;
+                if (metaData[3].equals("True")) {
+                    return metaData[1];
+                }
+            }
+        }
+        throw new DBAppException("There is no such table in the database.");
+    }
+
+    private void validateTerms(SQLTerm[] sqlTerms) throws IOException, DBAppException, ClassNotFoundException {
+        String targetTableName = sqlTerms[0].getTableName();
+        for (SQLTerm term : sqlTerms) {
+            if (!term.getColumnName().equals(targetTableName))
+                throw new DBAppException("The table name in all terms must be the same.");
+        }
+        FileReader metadata = new FileReader("src/main/resources/metadata.csv");
+        BufferedReader br = new BufferedReader(metadata);
+        String curLine = "";
+        Hashtable<String, String> colDataTypes = new Hashtable<>();
+        while ((curLine = br.readLine()) != null) {
+            String[] res = curLine.split(",");
+            if (res[0].equals(sqlTerms[0].getTableName())) {
+                colDataTypes.put(res[1], res[2]);
+            }
+        }
+        for (SQLTerm term : sqlTerms) {
+            String columnName = term.getColumnName();
+            Object columnValue = term.getValue();
+            if (!colDataTypes.containsKey(columnName)) {
+                throw new DBAppException("Column does not exist");
+            }
+            Class colClass = Class.forName(colDataTypes.get(columnName));
+            if (!colClass.isInstance(columnValue)) {
+                throw new DBAppException("Incompatible data types");
+            }
+
+        }
+    }
+
 
     private static void validateRecord(ArrayList<String[]> tableCols, Hashtable<String, Object> colNameValue) throws DBAppException, ParseException {
         //complete.
@@ -384,8 +594,7 @@ public class DBApp implements DBAppInterface {
     }
 
 
-    public static void main(String[] args) throws DBAppException, IOException, ClassNotFoundException {
+    public static void main(String[] args) throws DBAppException {
 
     }
-
 }
