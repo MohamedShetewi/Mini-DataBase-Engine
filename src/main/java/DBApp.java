@@ -5,7 +5,6 @@ import java.util.*;
 import java.text.DateFormat;
 
 
-
 public class DBApp implements DBAppInterface {
     @Override
     public void init() {
@@ -90,7 +89,7 @@ public class DBApp implements DBAppInterface {
     }
 
     @Override
-    public void insertIntoTable(String tableName, Hashtable<String, Object> colNameValue) throws DBAppException, IOException, ParseException {
+    public void insertIntoTable(String tableName, Hashtable<String, Object> colNameValue) throws DBAppException, IOException, ParseException, ClassNotFoundException {
         //1- Check the table exists and the input record is valid.
 
         boolean found = false;
@@ -113,14 +112,27 @@ public class DBApp implements DBAppInterface {
                 }
             }
         } catch (IOException e) {
-            e.getMessage();
+            System.out.println(e.getMessage());
         }
         if (!found) {
             throw new DBAppException("There is no such table in the Data Base.");
         }
+        String primaryKey = validateInsertRecord(tableCols, colNameValue);
 
-        validateRecord(tableCols, colNameValue);
+        //Deserialize the table and get its pages
+        try {
+            FileInputStream fileIn = new FileInputStream("src/main/resources/" + tableName + ".ser");
+            ObjectInputStream objectIn = new ObjectInputStream(fileIn);
+            Table table = (Table) objectIn.readObject();
+            objectIn.close();
+            fileIn.close();
+            Vector<Page> pages = table.getPages();
+            String type = colNameValue.get(primaryKey).getClass().getName();
 
+
+        }catch (ClassNotFoundException e){
+            System.out.println(e.getMessage());
+        }
     }
 
     @Override
@@ -136,7 +148,6 @@ public class DBApp implements DBAppInterface {
         fileIn.close();
 
 
-
     }
 
     @Override
@@ -149,22 +160,20 @@ public class DBApp implements DBAppInterface {
         return null;
     }
 
-    private static void validateRecord(ArrayList<String[]> tableCols, Hashtable<String, Object> colNameValue) throws DBAppException, ParseException {
+    private static String validateInsertRecord(ArrayList<String[]> tableCols, Hashtable<String, Object> colNameValue) throws DBAppException, ParseException {
         //complete.
         //The method checks for the following
-        //The input record include (exactly) all the fields of the table.
+        //The primary key is in the input record.
         //The input record's values are of the right types as the table in the metadata.
         //The input record's values are in the range between their min and max values.
-
-        if (colNameValue.size() != tableCols.size())
-            throw new DBAppException("The record is not valid.\nAll fields must be included");
-
+        boolean primarykeyExist = false;
+        String primaryKey = null;
         for (String[] record : tableCols) {
             boolean valid = true;
-
-            if (!colNameValue.containsKey(record[1]))
-                throw new DBAppException("The field " + record[1] + "is not in the record" + ".\nAll fields must be included");
-
+            if (record[3].equals("True")) {
+                primarykeyExist = true;
+                primaryKey = record[1];
+            }
             Class c = colNameValue.get(record[1]).getClass();
             if ((c.getName()).equals(record[2])) {
                 if (c.getName().equals("java.lang.Integer")) {
@@ -198,10 +207,13 @@ public class DBApp implements DBAppInterface {
             } else
                 throw new DBAppException("The value of the field " + record[1] + " is incompatible.\nThe value should be an instance of " + record[2] + ".");
         }
+        if (!primarykeyExist)
+            throw new DBAppException("The primary key must be included in the record.");
+        return primaryKey;
     }
 
     private Object validateUpdateInput(String tableName, String clusteringKeyValue,
-                                     Hashtable<String, Object> columnNameValue) throws IOException, ParseException, DBAppException, ClassNotFoundException {
+                                       Hashtable<String, Object> columnNameValue) throws IOException, ParseException, DBAppException, ClassNotFoundException {
         FileReader metadata = new FileReader("src/main/resources/metadata.csv");
         BufferedReader br = new BufferedReader(metadata);
         String curLine = "";
@@ -210,11 +222,11 @@ public class DBApp implements DBAppInterface {
         Hashtable<String, Object> colMax = new Hashtable<>();
         String clusteringType = "";
 
-        while((curLine = br.readLine()) != null){
+        while ((curLine = br.readLine()) != null) {
             String[] res = curLine.split(",");
-            if(res[0].equals(tableName)){
+            if (res[0].equals(tableName)) {
                 colDataTypes.put(res[1], res[2]);
-                switch (res[2]){
+                switch (res[2]) {
                     case "java.lang.Integer":
                         colMin.put(res[1], Integer.parseInt(res[5]));
                         colMax.put(res[1], Integer.parseInt(res[6]));
@@ -232,32 +244,32 @@ public class DBApp implements DBAppInterface {
                         colMax.put(res[1], res[6]);
                         break;
                 }
-                if(res[3].equals("True")){
+                if (res[3].equals("True")) {
                     clusteringType = res[2];
                 }
             }
         }
 
         Object clusteringObject;
-        switch (clusteringType){
+        switch (clusteringType) {
             case "java.lang.Integer":
                 try {
                     clusteringObject = Integer.parseInt(clusteringKeyValue);
-                }catch (NumberFormatException e){
+                } catch (NumberFormatException e) {
                     throw new DBAppException("Incompatible clustering key data type");
                 }
                 break;
             case "java.lang.Double":
                 try {
                     clusteringObject = Double.parseDouble(clusteringKeyValue);
-                }catch (NumberFormatException e){
+                } catch (NumberFormatException e) {
                     throw new DBAppException("Incompatible clustering key data type");
                 }
                 break;
             case "java.util.Date":
                 try {
                     clusteringObject = new SimpleDateFormat("YYYY-MM-DD").parse(clusteringKeyValue);
-                }catch (ParseException e){
+                } catch (ParseException e) {
                     throw new DBAppException("Incompatible clustering key data type");
                 }
                 break;
@@ -266,47 +278,47 @@ public class DBApp implements DBAppInterface {
                 break;
         }
 
-        for(String key: columnNameValue.keySet()){
-            if(!colDataTypes.containsKey(key)){
+        for (String key : columnNameValue.keySet()) {
+            if (!colDataTypes.containsKey(key)) {
                 throw new DBAppException("Column does not exist");
             }
             Class colClass = Class.forName(colDataTypes.get(key));
-            if(!colClass.isInstance(columnNameValue.get(key))){
+            if (!colClass.isInstance(columnNameValue.get(key))) {
                 throw new DBAppException("Incompatible data types");
             }
         }
 
-        for (String key: columnNameValue.keySet()){
-            switch (colDataTypes.get(key)){
+        for (String key : columnNameValue.keySet()) {
+            switch (colDataTypes.get(key)) {
                 case "java.lang.Integer":
-                    if(((Integer) columnNameValue.get(key)).compareTo((Integer) colMin.get(key)) < 0){
+                    if (((Integer) columnNameValue.get(key)).compareTo((Integer) colMin.get(key)) < 0) {
                         throw new DBAppException("Value for column " + key + " is below the minimum allowed");
                     }
-                    if(((Integer) columnNameValue.get(key)).compareTo((Integer) colMax.get(key)) > 0){
+                    if (((Integer) columnNameValue.get(key)).compareTo((Integer) colMax.get(key)) > 0) {
                         throw new DBAppException("Value for column " + key + " is above the maximum allowed");
                     }
                     break;
                 case "java.lang.Double":
-                    if(((Double) columnNameValue.get(key)).compareTo((Double) colMin.get(key)) < 0){
+                    if (((Double) columnNameValue.get(key)).compareTo((Double) colMin.get(key)) < 0) {
                         throw new DBAppException("Value for column " + key + " is below the minimum allowed");
                     }
-                    if(((Double) columnNameValue.get(key)).compareTo((Double) colMax.get(key)) > 0){
+                    if (((Double) columnNameValue.get(key)).compareTo((Double) colMax.get(key)) > 0) {
                         throw new DBAppException("Value for column " + key + " is above the maximum allowed");
                     }
                     break;
                 case "java.util.Date":
-                    if(((Date) columnNameValue.get(key)).compareTo((Date) colMin.get(key)) < 0){
+                    if (((Date) columnNameValue.get(key)).compareTo((Date) colMin.get(key)) < 0) {
                         throw new DBAppException("Value for column " + key + " is below the minimum allowed");
                     }
-                    if(((Date) columnNameValue.get(key)).compareTo((Date) colMax.get(key)) > 0){
+                    if (((Date) columnNameValue.get(key)).compareTo((Date) colMax.get(key)) > 0) {
                         throw new DBAppException("Value for column " + key + " is above the maximum allowed");
                     }
                     break;
                 default:
-                    if(((String) columnNameValue.get(key)).compareTo((String) colMin.get(key)) < 0){
+                    if (((String) columnNameValue.get(key)).compareTo((String) colMin.get(key)) < 0) {
                         throw new DBAppException("Value for column " + key + " is below the minimum allowed");
                     }
-                    if(((String) columnNameValue.get(key)).compareTo((String) colMax.get(key)) > 0){
+                    if (((String) columnNameValue.get(key)).compareTo((String) colMax.get(key)) > 0) {
                         throw new DBAppException("Value for column " + key + " is above the maximum allowed");
                     }
                     break;
