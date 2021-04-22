@@ -11,7 +11,7 @@ public class Page {
     private Object maxClusteringValue;
     private int numOfRecords;
 
-    public Page(String path, int numOfRecords, String clusteringKey) {
+    public Page(String path, int numOfRecords) {
         this.path = path;
         this.numOfRecords = numOfRecords;
     }
