@@ -48,14 +48,14 @@ public class Page {
         this.numOfRecords = numOfRecords;
     }
 
-    /*
+    /**
      * deletes all rows that matches ALL of the specified entries(AND operator) from the page
      * returns 0 if no rows are deleted,-1 if all rows are deleted and 1 if some (but not all) rows are deleted
      * @param columnNameValue,the column key-value pairs to which records will be compared with
-     * @param clusteringKey,the clustering key of the page's table
+     * @param clusteringKey,the   clustering key of the page's table
      * @throws ClassNotFoundException If an error occurred in the stored table pages format
-     * @throws IOException If an I/O error occurred
-     * @throws DBAppException If an an error occurred in the table(table not found,types don't match,...)
+     * @throws IOException            If an I/O error occurred
+     * @throws DBAppException         If an an error occurred in the table(table not found,types don't match,...)
      */
     public int delete(Hashtable<String, Object> columnNameValue, String clusteringKey) throws IOException, ClassNotFoundException {
         //read the page from disk
@@ -86,8 +86,9 @@ public class Page {
         setMinClusteringValue(rows.get(0).get(clusteringKey));
         return state;
     }
+
     /*
-    compares two objects assuming they are an instance of the same class
+     * compares two objects assuming they are an instance of the same class
      */
     public int compare(Object object1, Object object2) {
         if (object1 instanceof java.lang.Integer) {

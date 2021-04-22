@@ -201,9 +201,10 @@ public class DBApp implements DBAppInterface {
         }
     }
 
-    /*
-    saves the table to the disk
-    @throws IOException If an I/O error occurred
+    /**
+     * saves the table to the disk
+     *
+     * @throws IOException If an I/O error occurred
      */
     private void save(String path) throws IOException {
         File f = new File(path);
@@ -212,8 +213,8 @@ public class DBApp implements DBAppInterface {
         oos.close();
     }
 
-    /*
-    deletes the table's file on the disk
+    /**
+     * deletes the table's file on the disk
      */
     public boolean delete(String path) {
         File f = new File(path);
@@ -221,8 +222,8 @@ public class DBApp implements DBAppInterface {
     }
 
     @Override
-    /*
-     * deletes all rows that matches ALL of the specified entries(AND operator) from the table
+    /**
+     * deletes all rows that matches ALL of the specified entries (AND operator) from the table
      * @param tableName, name of the table to delete the rows from
      * @param columnNameValue, the entries to which rows will be compared with
      * @throws ClassNotFoundException If an error occurred in the stored table pages format
@@ -255,15 +256,15 @@ public class DBApp implements DBAppInterface {
         save(tablePath);
     }
 
-    /*
+    /**
      * searches for the rows that match the entries using linear search and deletes them
      * returns true if some rows are deleted
-     * @param table ,the table to delete the rows from
+     * @param table            ,the table to delete the rows from
      * @param columnNameValue, the entries to which rows will be compared with
-     * @param clusteringKey, the clustering key of the table
+     * @param clusteringKey,   the clustering key of the table
      * @throws ClassNotFoundException If an error occurred in the stored table pages format
-     * @throws IOException If an I/O error occurred
-     * @throws DBAppException If an an error occurred in the table(table not found,types don't match,...)
+     * @throws IOException            If an I/O error occurred
+     * @throws DBAppException         If an an error occurred in the table(table not found,types don't match,...)
      */
     private boolean deleteFromTableLinearSearch(Table table, Hashtable<String, Object> columnNameValue, String clusteringKey) throws IOException, ClassNotFoundException {
         Vector<Page> pages = table.getPages();
@@ -286,15 +287,15 @@ public class DBApp implements DBAppInterface {
         return deletedRows;
     }
 
-    /*
+    /**
      * searches for the row that contains the specified clustering value and deletes it
      * returns true if the row is deleted
-     * @param table,name of the table to delete the rows from
-     * @param columnNameValue,the entries to which records will be compared with
-     * @param clusteringKey, the clustering key of the table
+     * @param table,           name of the table to delete the rows from
+     * @param columnNameValue, the entries to which records will be compared with
+     * @param clusteringKey,   the clustering key of the table
      * @throws ClassNotFoundException If an error occurred in the stored table pages format
-     * @throws IOException If an I/O error occurred
-     * @throws DBAppException If an an error occurred in the table(table not found,types don't match,...)
+     * @throws IOException            If an I/O error occurred
+     * @throws DBAppException         If an an error occurred in the table(table not found,types don't match,...)
      */
     private boolean deleteFromTableBinarySearch(Table table, Hashtable<String, Object> columnNameValue, String clusteringKey) throws IOException, ClassNotFoundException {
         Vector<Page> pages = table.getPages();
