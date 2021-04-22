@@ -1,12 +1,11 @@
-import java.io.Serializable;
+import java.io.*;
 import java.util.Vector;
 
 public class Table implements Serializable {
-   private String tableName;
-   private Vector<Page> pages;
+    private String tableName;
+    private Vector<Page> pages;
 
-    public Table(String tableName)
-    {
+    public Table(String tableName) {
         this.tableName = tableName;
         pages = new Vector<>();
     }
@@ -26,4 +25,5 @@ public class Table implements Serializable {
     public void setPages(Vector<Page> pages) {
         this.pages = pages;
     }
+
 }

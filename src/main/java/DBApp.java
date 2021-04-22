@@ -201,9 +201,117 @@ public class DBApp implements DBAppInterface {
         }
     }
 
-    @Override
-    public void deleteFromTable(String tableName, Hashtable<String, Object> columnNameValue) throws DBAppException {
+    /*
+    saves the table to the disk
+    @throws IOException If an I/O error occurred
+     */
+    private void save(String path) throws IOException {
+        File f = new File(path);
+        ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(f));
+        oos.writeObject(this);
+        oos.close();
+    }
 
+    /*
+    deletes the table's file on the disk
+     */
+    public boolean delete(String path) {
+        File f = new File(path);
+        return f.delete();
+    }
+
+    @Override
+    /*
+     * deletes all rows that matches ALL of the specified entries(AND operator) from the table
+     * @param tableName, name of the table to delete the rows from
+     * @param columnNameValue, the entries to which rows will be compared with
+     * @throws ClassNotFoundException If an error occurred in the stored table pages format
+     * @throws IOException If an I/O error occurred
+     * @throws DBAppException If an an error occurred in the table(table not found,types don't match,...)
+     */
+    public void deleteFromTable(String tableName, Hashtable<String, Object> columnNameValue) throws DBAppException, IOException, ClassNotFoundException {
+        //validate table , get clusteringKey
+        String clusteringKey = validateExistingTable(tableName);
+        //Read the table from disk
+        String tablePath = "src/main/resources/Tables/" + tableName + ".ser";
+        FileInputStream serializedFile = new FileInputStream(tablePath);
+        ObjectInputStream in = new ObjectInputStream(serializedFile);
+        Table targetTable = (Table) in.readObject();
+        in.close();
+        serializedFile.close();
+        //validate columns names and values??
+
+        //check if the clustering key exists in the entries
+        boolean clusteringKeyExists = columnNameValue.get(clusteringKey) != null;
+        boolean deleted;
+        if (clusteringKeyExists)
+            deleted = deleteFromTableBinarySearch(targetTable, columnNameValue, clusteringKey);//binary search for the clustering key
+        else
+            deleted = deleteFromTableLinearSearch(targetTable, columnNameValue, clusteringKey);// linear deletion
+        if (!deleted)
+            throw new DBAppException("No Rows matching the entries were found");
+        //update the table's file in disk
+        delete(tablePath);
+        save(tablePath);
+    }
+
+    /*
+     * searches for the rows that match the entries using linear search and deletes them
+     * returns true if some rows are deleted
+     * @param table ,the table to delete the rows from
+     * @param columnNameValue, the entries to which rows will be compared with
+     * @param clusteringKey, the clustering key of the table
+     * @throws ClassNotFoundException If an error occurred in the stored table pages format
+     * @throws IOException If an I/O error occurred
+     * @throws DBAppException If an an error occurred in the table(table not found,types don't match,...)
+     */
+    private boolean deleteFromTableLinearSearch(Table table, Hashtable<String, Object> columnNameValue, String clusteringKey) throws IOException, ClassNotFoundException {
+        Vector<Page> pages = table.getPages();
+        Iterator<Page> pagesIterator = pages.iterator();
+        boolean deletedRows = false;//is set to true if some rows are deleted
+        while (pagesIterator.hasNext()) {
+            Page p = pagesIterator.next();
+            int state = p.delete(columnNameValue, clusteringKey);//returns -1 if the page becomes empty
+            //update the page's file in disk
+            delete(p.getPath());
+            if (state == -1) {
+                //if the page is empty , dont save the page to disk and remove it from the vector
+                pagesIterator.remove();
+                deletedRows = true;
+            } else {
+                deletedRows |= state == 1;
+                save(p.getPath());
+            }
+        }
+        return deletedRows;
+    }
+
+    /*
+     * searches for the row that contains the specified clustering value and deletes it
+     * returns true if the row is deleted
+     * @param table,name of the table to delete the rows from
+     * @param columnNameValue,the entries to which records will be compared with
+     * @param clusteringKey, the clustering key of the table
+     * @throws ClassNotFoundException If an error occurred in the stored table pages format
+     * @throws IOException If an I/O error occurred
+     * @throws DBAppException If an an error occurred in the table(table not found,types don't match,...)
+     */
+    private boolean deleteFromTableBinarySearch(Table table, Hashtable<String, Object> columnNameValue, String clusteringKey) throws IOException, ClassNotFoundException {
+        Vector<Page> pages = table.getPages();
+        int index = searchForPage(pages, columnNameValue.get(clusteringKey));//binary search for the index of the page that contains the clustering value
+        if (index >= pages.size())//row not found
+            return false;
+        Page page = pages.get(index);//page that contains the row to delete
+        int state = page.delete(columnNameValue, clusteringKey);//returns -1 if the page is empty
+        //update the page's file in disk
+        delete(page.getPath());
+        if (state == -1) {
+            //if the page is empty , dont save the page to disk and remove it from the vector
+            pages.remove(index);
+            return true;
+        }
+        save(page.getPath());
+        return state == 1;
     }
 
     @Override
@@ -267,9 +375,9 @@ public class DBApp implements DBAppInterface {
 
     private Vector<Hashtable<String, Object>> rowsDifference(Vector<Hashtable<String, Object>> a, Vector<Hashtable<String, Object>> b, String clusteringColumnName) {
         Vector<Hashtable<String, Object>> resultOfDifference = new Vector<>();
-        for(Hashtable<String, Object> rowA: a){
-            for(Hashtable<String, Object> rowB: b){
-                if(!rowA.get(clusteringColumnName).equals(rowB.get(clusteringColumnName))){
+        for (Hashtable<String, Object> rowA : a) {
+            for (Hashtable<String, Object> rowB : b) {
+                if (!rowA.get(clusteringColumnName).equals(rowB.get(clusteringColumnName))) {
                     resultOfDifference.add(rowA);
                 }
             }
@@ -279,9 +387,9 @@ public class DBApp implements DBAppInterface {
 
     private Vector<Hashtable<String, Object>> rowsIntersection(Vector<Hashtable<String, Object>> a, Vector<Hashtable<String, Object>> b, String clusteringColumnName) {
         Vector<Hashtable<String, Object>> resultOfIntersection = new Vector<>();
-        for(Hashtable<String, Object> rowA: a){
-            for(Hashtable<String, Object> rowB: b){
-                if(rowA.get(clusteringColumnName).equals(rowB.get(clusteringColumnName))){
+        for (Hashtable<String, Object> rowA : a) {
+            for (Hashtable<String, Object> rowB : b) {
+                if (rowA.get(clusteringColumnName).equals(rowB.get(clusteringColumnName))) {
                     resultOfIntersection.add(rowA);
                 }
             }
@@ -345,19 +453,19 @@ public class DBApp implements DBAppInterface {
         serializedFile.close();
 
         if (term.getOperator().equals("=")) {
-            lo=0;
-            hi=targetPageRows.size()-1;
+            lo = 0;
+            hi = targetPageRows.size() - 1;
             while (lo <= hi) {
-                int mid = (lo+hi) /2;
+                int mid = (lo + hi) / 2;
                 Hashtable<String, Object> curRow = targetPageRows.get(mid);
-                if (booleanValueOfTerm(curRow, term)){
+                if (booleanValueOfTerm(curRow, term)) {
                     result.add(curRow);
                     break;
                 }
                 if (term.compareTo(curRow.get(term.getColumnName())) < 0)
-                    hi = mid-1;
+                    hi = mid - 1;
                 else
-                    lo = mid+1;
+                    lo = mid + 1;
             }
 
             return result;
