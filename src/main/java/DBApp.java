@@ -203,6 +203,7 @@ public class DBApp implements DBAppInterface {
 
     /**
      * saves the table to the disk
+     *
      * @throws IOException If an I/O error occurred
      */
     private void save(String path) throws IOException {
@@ -227,7 +228,7 @@ public class DBApp implements DBAppInterface {
      * @param columnNameValue the entries to which rows will be compared with
      * @throws ClassNotFoundException If an error occurred in the stored table pages format
      * @throws IOException If an I/O error occurred
-     * @throws DBAppException If an an error occurred in the table(table not found,types don't match,...)
+     * @throws DBAppException If an an error occurred in the table(No rows are deleted,table not found,types don't match,...)
      */
     public void deleteFromTable(String tableName, Hashtable<String, Object> columnNameValue) throws DBAppException, IOException, ClassNotFoundException {
         //validate table , get clusteringKey
@@ -258,6 +259,7 @@ public class DBApp implements DBAppInterface {
     /**
      * searches for the rows that match the entries using linear search and deletes them
      * returns true if some rows are deleted
+     *
      * @param table           the table to delete the rows from
      * @param columnNameValue the entries to which rows will be compared with
      * @param clusteringKey   the clustering key of the table
@@ -289,6 +291,7 @@ public class DBApp implements DBAppInterface {
     /**
      * searches for the row that contains the specified clustering value and deletes it
      * returns true if the row is deleted
+     *
      * @param table           name of the table to delete the rows from
      * @param columnNameValue the entries to which records will be compared with
      * @param clusteringKey   the clustering key of the table
