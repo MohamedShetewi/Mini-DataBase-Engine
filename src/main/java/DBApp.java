@@ -8,7 +8,17 @@ import java.text.DateFormat;
 public class DBApp implements DBAppInterface {
     @Override
     public void init() {
-
+        File tablesDirectory = new File("src/main/resources/data/Tables");
+        tablesDirectory.mkdir();
+//        try {
+//            FileWriter metaDataFile = new FileWriter("src/main/resources/metadata.csv");
+//            StringBuilder tableMetaData = new StringBuilder();
+//            tableMetaData.append("Table Name,Column Name,Column Type,ClusteringKey,Indexed,min,max");
+//            metaDataFile.write(tableMetaData.toString());
+//            metaDataFile.close();
+//        } catch (IOException e) {
+//            e.printStackTrace();
+//        }
     }
 
     @Override
@@ -28,7 +38,7 @@ public class DBApp implements DBAppInterface {
                 throw new DBAppException();
 
 
-        File tableDirectory = new File("src/main/resources/Tables/" + tableName);
+        File tableDirectory = new File("src/main/resources/data/Tables/" + tableName);
 
         if (tableDirectory.exists())
             throw new DBAppException();
@@ -38,7 +48,7 @@ public class DBApp implements DBAppInterface {
         Table tableInstance = new Table(tableName);
 
         try {
-            FileOutputStream serializedFile = new FileOutputStream("src/main/resources/Tables/" + tableName + ".ser");
+            FileOutputStream serializedFile = new FileOutputStream("src/main/resources/data/Tables/" + tableName + ".ser");
             ObjectOutputStream out = new ObjectOutputStream(serializedFile);
             out.writeObject(tableInstance);
             out.close();
@@ -59,9 +69,7 @@ public class DBApp implements DBAppInterface {
 
             String curLine;
             while ((curLine = br.readLine()) != null)
-                tableMetaData.append(curLine);
-
-            tableMetaData.append("\n");
+                tableMetaData.append(curLine).append('\n');
 
             FileWriter metaDataFile = new FileWriter("src/main/resources/metadata.csv");
             for (String colName : colNameType.keySet()) {
@@ -87,14 +95,17 @@ public class DBApp implements DBAppInterface {
         String primaryKey = validateRecord(tableName, colNameValue);
         try {
             //Deserialize table and get the index of the page to insert in
-            Vector<Page> pages = deserializeTable(tableName);
+            Table t = (Table) deserializeObject("src/main/resources/data/Tables/" + tableName + ".ser");
+            Vector<Page> pages = t.getPages();
             int idxOfPage = searchForPage(pages, colNameValue.get(primaryKey));
-
-            if (idxOfPage == -1) {
+            if(colNameValue.get("course_name").equals("pAYqDr")){
+                System.out.println("DONE");
+            }
+            if (pages.size() == 0) {
                 //empty table
-                createAndSerializePage(tableName, pages, colNameValue, primaryKey, 0);
-                delete("src/main/resources/" + tableName + ".ser");
-                serializeTable(tableName,pages);
+                createAndSerializePage(t, colNameValue, primaryKey, 0);
+                delete("src/main/resources/data/Tables/" + tableName + ".ser");
+                serializeObject(t, "src/main/resources/data/Tables/" + tableName + ".ser");
                 return;
             }
             int maxCountInPage = readConfig()[0];
@@ -102,202 +113,178 @@ public class DBApp implements DBAppInterface {
             if (idxOfPage < pages.size()) {
                 //I found the exact page I should insert in
                 Page curPage = pages.get(idxOfPage);
-                Vector<Hashtable<String, Object>> pageRecords = deserializePage(curPage.getPath());
+                Vector<Hashtable<String, Object>> pageRecords = (Vector<Hashtable<String, Object>>) deserializeObject(curPage.getPath());
                 int idxOfRecord = searchInsidePage(pageRecords, colNameValue.get(primaryKey), primaryKey);
-                if (idxOfRecord < curPage.getNumOfRecords())
-                    throw new DBAppException("The record already exists in the table.");
-                if (curPage.getNumOfRecords() == maxCountInPage) {
+                if (idxOfRecord < pageRecords.size())
+                    throw new DBAppException("The record already exists in the table." + "Tried to insert: " + colNameValue.get(primaryKey));
+                if (pageRecords.size() == maxCountInPage) {
                     //Page is full. Check the following page.
                     if (idxOfPage + 1 < pages.size()) {
                         Page followingPage = pages.get(idxOfPage + 1);
                         if (followingPage.getNumOfRecords() == maxCountInPage) {
                             //following page is also full. Create new page in between and shift.
-                            createNewPageAndShift(tableName, pages, colNameValue, pageRecords, primaryKey, idxOfPage + 1,curPage.getPath());
+                            createNewPageAndShift(t, colNameValue, pageRecords, primaryKey, idxOfPage);
                         } else {
                             //following page is not full.
                             //shift last record in the current page to the following page
                             //and insert the record in place in the current page.
+                            insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
 
                             Hashtable<String, Object> lastRecord = pageRecords.remove(pageRecords.size() - 1);
-                            Vector<Hashtable<String, Object>> followingPageRecords = deserializePage(followingPage.getPath());
+                            Vector<Hashtable<String, Object>> followingPageRecords = (Vector<Hashtable<String, Object>>) deserializeObject(followingPage.getPath());
+
                             followingPageRecords.add(0, lastRecord);
                             followingPage.setMinClusteringValue(lastRecord.get(primaryKey));
                             followingPage.setNumOfRecords(followingPageRecords.size());
+
+                            curPage.setNumOfRecords(pageRecords.size());
+                            curPage.setMaxClusteringValue(pageRecords.get(pageRecords.size() - 1).get(primaryKey));
+
                             delete(followingPage.getPath());
-                            serializePage(followingPage.getPath(), followingPageRecords);
-                            insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
-
+                            serializeObject(followingPageRecords, followingPage.getPath());
                         }
-
                     } else {
                         //current page was the last page in the table.
                         //need to create new page and shift some records
-                        createNewPageAndShift(tableName, pages, colNameValue, pageRecords, primaryKey, idxOfPage + 1,curPage.getPath());
-
+                        createNewPageAndShift(t, colNameValue, pageRecords, primaryKey, idxOfPage);
                     }
-
                 } else {
                     insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
                 }
-
-
             } else {
                 //The key doesn't belong to a range in any page.
 
                 idxOfPage -= pages.size();
-                if (idxOfPage == -1) {
+                if (idxOfPage == 0) {
                     //check for place in page at index 0 else create new page
                     Page curPage = pages.get(0);
                     if (curPage.getNumOfRecords() < maxCountInPage) {
-                        Vector<Hashtable<String, Object>> pageRecords = deserializePage(curPage.getPath());
-                        int idxOfRecord = searchInsidePage(pageRecords, colNameValue.get(primaryKey), primaryKey) - curPage.getNumOfRecords();
+                        Vector<Hashtable<String, Object>> pageRecords = (Vector<Hashtable<String, Object>>) deserializeObject(curPage.getPath());
+                        int idxOfRecord = searchInsidePage(pageRecords, colNameValue.get(primaryKey), primaryKey);
                         insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
                     } else {
-                        createAndSerializePage(tableName, pages, colNameValue, primaryKey, 0);
+                        createAndSerializePage(t, colNameValue, primaryKey, 0);
                     }
-                } else if (idxOfPage == pages.size() - 1) {
+                } else if (idxOfPage == pages.size()) {
                     //check for place in last page else create new page
                     Page curPage = pages.get(pages.size() - 1);
                     if (curPage.getNumOfRecords() < maxCountInPage) {
-                        Vector<Hashtable<String, Object>> pageRecords = deserializePage(curPage.getPath());
-                        int idxOfRecord = searchInsidePage(pageRecords, colNameValue.get(primaryKey), primaryKey) - curPage.getNumOfRecords();
+                        Vector<Hashtable<String, Object>> pageRecords = (Vector<Hashtable<String, Object>>) deserializeObject(curPage.getPath());
+                        int idxOfRecord = searchInsidePage(pageRecords, colNameValue.get(primaryKey), primaryKey);
                         insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
                     } else {
-                        createAndSerializePage(tableName, pages, colNameValue, primaryKey, pages.size());
+                        createAndSerializePage(t, colNameValue, primaryKey, pages.size());
                     }
                 } else {
                     //check for the current page then the following else create a new page
-                    Page curPage = pages.get(idxOfPage);
+                    Page curPage = pages.get(idxOfPage - 1);
                     if (curPage.getNumOfRecords() < maxCountInPage) {
-                        Vector<Hashtable<String, Object>> pageRecords = deserializePage(curPage.getPath());
-                        int idxOfRecord = searchInsidePage(pageRecords, colNameValue.get(primaryKey), primaryKey) - curPage.getNumOfRecords();
+                        Vector<Hashtable<String, Object>> pageRecords = (Vector<Hashtable<String, Object>>) deserializeObject(curPage.getPath());
+                        int idxOfRecord = searchInsidePage(pageRecords, colNameValue.get(primaryKey), primaryKey);
                         insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
                     } else {
-                        curPage = pages.get(idxOfPage + 1); //this now is following page
+                        curPage = pages.get(idxOfPage); //this now is following page
                         if (curPage.getNumOfRecords() < maxCountInPage) {
-                            Vector<Hashtable<String, Object>> pageRecords = deserializePage(curPage.getPath());
-                            int idxOfRecord = searchInsidePage(pageRecords, colNameValue.get(primaryKey), primaryKey) - curPage.getNumOfRecords();
+                            Vector<Hashtable<String, Object>> pageRecords = (Vector<Hashtable<String, Object>>) deserializeObject(curPage.getPath());
+                            int idxOfRecord = searchInsidePage(pageRecords, colNameValue.get(primaryKey), primaryKey);
                             insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
                         } else {
-                            createAndSerializePage(tableName, pages, colNameValue, primaryKey, idxOfPage + 1);
-
+                            createAndSerializePage(t, colNameValue, primaryKey, idxOfPage);
                         }
                     }
-
                 }
-
-
             }
+            delete("src/main/resources/data/Tables/" + tableName + ".ser");
+            serializeObject(t, "src/main/resources/data/Tables/" + tableName + ".ser");
         } catch (Exception e) {
-            System.out.println(e.getMessage());
+            e.printStackTrace();
         }
     }
 
-    public void createAndSerializePage(String tableName, Vector<Page> pages, Hashtable<String, Object> colNameValue, String primaryKey, int index) {
-        try {
-            String pagePath = "src/main/resources/" + tableName + "/page" + pages.size() + ".ser";
-            Page newPage = new Page(pagePath, 0);
-            Vector<Hashtable<String, Object>> pageRecords = new Vector<>();
-            pageRecords.add(colNameValue);
-            newPage.setMinClusteringValue(colNameValue.get(primaryKey));
-            newPage.setMaxClusteringValue(colNameValue.get(primaryKey));
-            newPage.setNumOfRecords(newPage.getNumOfRecords() + 1);
-            pages.add(index, newPage);
-            FileOutputStream fileOut = new FileOutputStream(pagePath);
-            ObjectOutputStream objectOut = new ObjectOutputStream(fileOut);
-            objectOut.writeObject(pageRecords);
-            objectOut.close();
-            fileOut.close();
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-        }
+    public void createAndSerializePage(Table table, Hashtable<String, Object> colNameValue, String primaryKey, int index) {
+
+        String pagePath = "src/main/resources/data/Tables/" + table.getTableName() + "/page" + table.getPagesCounter() + ".ser";
+        table.setPagesCounter(table.getPagesCounter() + 1);
+        Page newPage = new Page(pagePath);
+
+        Vector<Hashtable<String, Object>> pageRecords = new Vector<>();
+        pageRecords.add(colNameValue);
+        newPage.setMinClusteringValue(colNameValue.get(primaryKey));
+        newPage.setMaxClusteringValue(colNameValue.get(primaryKey));
+        newPage.setNumOfRecords(newPage.getNumOfRecords() + 1);
+
+        table.getPages().add(index, newPage);
+        serializeObject(pageRecords, pagePath);
+
     }
 
     private void insertRecordInPlace(int idxOfRecord, Hashtable<String, Object> colNameValue, String primaryKey, Vector<Hashtable<String, Object>> pageRecords, Page curPage) {
-
         idxOfRecord -= curPage.getNumOfRecords();
         pageRecords.add(idxOfRecord, colNameValue);
         curPage.setMinClusteringValue(pageRecords.get(0).get(primaryKey));
         curPage.setMaxClusteringValue(pageRecords.get(pageRecords.size() - 1).get(primaryKey));
-        curPage.setNumOfRecords(curPage.getNumOfRecords() + 1);
+        curPage.setNumOfRecords(pageRecords.size());
         delete(curPage.getPath());
-        serializePage(curPage.getPath(),pageRecords);
-
+        serializeObject(pageRecords, curPage.getPath());
     }
 
-    private void createNewPageAndShift(String tableName, Vector<Page> pages, Hashtable<String, Object> colNameValue, Vector<Hashtable<String, Object>> pageRecords, String primaryKey, int idxOfPage,String curPagePath) {
+    private void createNewPageAndShift(Table table, Hashtable<String, Object> colNameValue, Vector<Hashtable<String, Object>> pageRecords, String primaryKey, int idxOfPreviousPage) {
 
-        String newPagePath = "src/main/resources/" + tableName + "/page" + pages.size() + ".ser";
+        String newPagePath = "src/main/resources/data/Tables/" + table.getTableName() + "/page" + table.getPagesCounter() + ".ser";
+        table.setPagesCounter(table.getPagesCounter() + 1);
+
         Vector<Hashtable<String, Object>> newPageRecords = new Vector<>();
         newPageRecords.add(colNameValue);
         for (int i = 0; i < pageRecords.size(); i++) {
             Hashtable<String, Object> record = pageRecords.get(i);
-            if (compareClusteringValues(record.get(primaryKey), colNameValue.get(primaryKey)) > 0) {
+            if (compare(record.get(primaryKey), colNameValue.get(primaryKey)) > 0) {
                 Hashtable<String, Object> newRecord = pageRecords.remove(i--);
                 newPageRecords.add(newRecord);
             }
         }
-        Page newPage = new Page(newPagePath, newPageRecords.size());
+        Page newPage = new Page(newPagePath);
+
         newPage.setMinClusteringValue(colNameValue.get(primaryKey));
         newPage.setMaxClusteringValue(newPageRecords.get(newPageRecords.size() - 1).get(primaryKey));
-        serializePage(newPagePath, newPageRecords);
-        pages.add(idxOfPage + 1, newPage);
-        delete(curPagePath);
-        serializePage(curPagePath,pageRecords);
+        newPage.setNumOfRecords(newPageRecords.size());
+
+        table.getPages().get(idxOfPreviousPage).setNumOfRecords(pageRecords.size());
+        table.getPages().get(idxOfPreviousPage).setMinClusteringValue(pageRecords.get(0).get(primaryKey));
+        table.getPages().get(idxOfPreviousPage).setMaxClusteringValue(pageRecords.get(pageRecords.size() - 1).get(primaryKey));
+
+        delete(table.getPages().get(idxOfPreviousPage).getPath());
+        serializeObject(pageRecords, table.getPages().get(idxOfPreviousPage).getPath());
+
+        serializeObject(newPageRecords, newPagePath);
+        table.getPages().add(idxOfPreviousPage + 1, newPage);
+
     }
 
-    private void serializePage(String pagePath, Vector<Hashtable<String, Object>> pageRecords) {
+    private void serializeObject(Object o, String path) {
         try {
-            FileOutputStream fileOut = new FileOutputStream(pagePath);
+            FileOutputStream fileOut = new FileOutputStream(path);
             ObjectOutputStream objectOut = new ObjectOutputStream(fileOut);
-            objectOut.writeObject(pageRecords);
+            objectOut.writeObject(o);
             objectOut.close();
             fileOut.close();
         } catch (Exception e) {
-            System.out.println(e.getMessage());
+            e.printStackTrace();
         }
     }
-    private void serializeTable(String tableName,Vector<Page> pages){
+
+    private Object deserializeObject(String path) {
+        Object o = null;
         try {
-            FileOutputStream fileOut = new FileOutputStream("src/main/resources/" + tableName + ".ser");
-            ObjectOutputStream objectOut = new ObjectOutputStream(fileOut);
-            objectOut.writeObject(pages);
-            objectOut.close();
-            fileOut.close();
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-        }
-    }
-    private Vector<Page> deserializeTable(String tableName) {
-        Table table;
-        Vector<Page> pages = new Vector<>();
-        try {
-            FileInputStream fileIn = new FileInputStream("src/main/resources/" + tableName + ".ser");
+            FileInputStream fileIn = new FileInputStream(path);
             ObjectInputStream objectIn = new ObjectInputStream(fileIn);
-            table = (Table) objectIn.readObject();
-            pages = table.getPages();
+            o = objectIn.readObject();
             objectIn.close();
             fileIn.close();
 
         } catch (Exception e) {
-            System.out.println(e.getMessage());
+            e.printStackTrace();
         }
-        return pages;
-    }
-
-    private Vector<Hashtable<String, Object>> deserializePage(String pagePath) {
-        Vector<Hashtable<String, Object>> pageRecords = null;
-        try {
-            FileInputStream fileIn = new FileInputStream(pagePath);
-            ObjectInputStream objectIn = new ObjectInputStream(fileIn);
-            pageRecords = (Vector<Hashtable<String, Object>>) objectIn.readObject();
-            objectIn.close();
-            fileIn.close();
-
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-        }
-        return pageRecords;
+        return o;
     }
 
     private String validateRecord(String tableName, Hashtable<String, Object> colNameValue) throws DBAppException {
@@ -327,7 +314,7 @@ public class DBApp implements DBAppInterface {
                 }
             }
         } catch (IOException e) {
-            e.getMessage();
+            e.printStackTrace();
         }
         if (!found) {
             throw new DBAppException("There is no such table in the Database.");
@@ -338,27 +325,29 @@ public class DBApp implements DBAppInterface {
         for (String[] record : tableCols) {
             boolean valid = true;
             if (record[3].equals("True")) {
-                primaryKeyExist = true;
+                primaryKeyExist = colNameValue.get(record[1]) != null;
                 primaryKey = record[1];
             }
+            if(!colNameValue.containsKey(record[1]))
+                continue;
             Class c = colNameValue.get(record[1]).getClass();
             if ((c.getName()).equals(record[2])) {
                 switch (c.getName()) {
                     case "java.lang.Integer": {
-                        int min = Integer.parseInt(record[5]);
-                        int max = Integer.parseInt(record[6]);
-                        if (!((int) colNameValue.get(record[1]) >= min && (int) colNameValue.get(record[1]) <= max))
+                        Integer min = Integer.parseInt(record[5]);
+                        Integer max = Integer.parseInt(record[6]);
+                        if (!(((Integer) colNameValue.get(record[1])).compareTo(min) >= 0 && ((Integer) colNameValue.get(record[1])).compareTo(max) <= 0))
                             valid = false;
                         break;
                     }
                     case "java.lang.String": {
                         String min = record[5];
                         String max = record[6];
-                        if (!(((String) colNameValue.get(record[1])).compareTo(min) >= 0 && ((String) colNameValue.get(record[1])).compareTo(max) <= 0))
+                        if (!(compareString((String) colNameValue.get(record[1]),min) >= 0 &&compareString((String) colNameValue.get(record[1]),max) <= 0))
                             valid = false;
                         break;
                     }
-                    case "java.lang.String.Double": {
+                    case "java.lang.Double": {
                         double min = Double.parseDouble(record[5]);
                         double max = Double.parseDouble(record[6]);
                         if (!((double) colNameValue.get(record[1]) >= min && (double) colNameValue.get(record[1]) <= max))
@@ -370,15 +359,15 @@ public class DBApp implements DBAppInterface {
                             DateFormat format = new SimpleDateFormat("yyyy-MM-dd");
                             Date min = format.parse(record[5]);
                             Date max = format.parse(record[6]);
-                            if (!(format.parse((String) colNameValue.get(record[1])).compareTo(min) >= 0 && format.parse((String) colNameValue.get(record[1])).compareTo(max) <= 0))
+                            if (((Date) colNameValue.get(record[1])).compareTo(min) < 0 || ((Date) colNameValue.get(record[1])).compareTo(max) > 0)
                                 valid = false;
                         } catch (ParseException e) {
-                            e.getMessage();
+                            e.printStackTrace();
                         }
                         break;
                 }
                 if (!valid)
-                    throw new DBAppException("The value of the field " + record[1] + " is not in the range.\nThe value should be between " + record[5] + " and " + record[6]);
+                    throw new DBAppException("The value of the field " + record[1] + " is not in the range.\nThe value should be between " + record[5] + " and " + record[6] + ". Found: " + colNameValue.get(record[1]));
             } else
                 throw new DBAppException("The value of the field " + record[1] + " is incompatible.\nThe value should be an instance of " + record[2] + ".");
         }
@@ -394,12 +383,12 @@ public class DBApp implements DBAppInterface {
         try {
             is = new FileInputStream(filePath);
         } catch (FileNotFoundException ex) {
-            System.out.println(ex.getMessage());
+            ex.printStackTrace();
         }
         try {
             prop.load(is);
         } catch (IOException ex) {
-            System.out.println(ex.getMessage());
+            ex.printStackTrace();
         }
         int[] arr = new int[2];
         arr[0] = Integer.parseInt(prop.getProperty("MaximumRowsCountinPage"));
@@ -413,7 +402,6 @@ public class DBApp implements DBAppInterface {
     }
 
 
-
     @Override
     public void updateTable(String tableName, String clusteringKeyValue,
                             Hashtable<String, Object> columnNameValue)
@@ -421,35 +409,24 @@ public class DBApp implements DBAppInterface {
         Object[] clusteringInfo = validateUpdateInput(tableName, clusteringKeyValue, columnNameValue);
         String clusteringCol = (String) clusteringInfo[0];
         Object clusteringObject = clusteringInfo[1];
-        FileInputStream fileIn = new FileInputStream("src/main/resources/Tables/" + tableName + ".ser");
-        ObjectInputStream in = new ObjectInputStream(fileIn);
-        Table t = (Table) in.readObject();
-        in.close();
-        fileIn.close();
+
+        Table t = (Table) deserializeObject("src/main/resources/data/Tables/" + tableName + ".ser");
 
         int pageIdx = searchForPage(t.getPages(), clusteringObject);
-        if (pageIdx == -1) {
+        if (pageIdx >= t.getPages().size()) {
             throw new DBAppException("Invalid clustering key value");
         }
-        FileInputStream pageFileIn = new FileInputStream(t.getPages().get(pageIdx).getPath());
-        ObjectInputStream pageIn = new ObjectInputStream(pageFileIn);
-        Vector<Hashtable<String, Object>> page = (Vector<Hashtable<String, Object>>) pageIn.readObject();
-        pageIn.close();
-        pageFileIn.close();
+        Vector<Hashtable<String, Object>> page = (Vector<Hashtable<String, Object>>) deserializeObject(t.getPages().get(pageIdx).getPath());
 
         int rowIdx = searchInsidePage(page, clusteringObject, clusteringCol);
-        if (rowIdx == -1) {
+        if (rowIdx >= page.size()) {
             throw new DBAppException("Invalid clustering key value");
         }
         for (String key : columnNameValue.keySet()) {
             page.get(rowIdx).replace(key, columnNameValue.get(key));
         }
-
-        FileOutputStream pageFileOut = new FileOutputStream(t.getPages().get(pageIdx).getPath());
-        ObjectOutputStream pageOut = new ObjectOutputStream(pageFileOut);
-        pageOut.writeObject(page);
-        pageOut.close();
-        pageFileOut.close();
+        delete(t.getPages().get(pageIdx).getPath());
+        serializeObject(page, t.getPages().get(pageIdx).getPath());
     }
 
     private int searchForPage(Vector<Page> pages, Object clusteringObject) {
@@ -457,16 +434,16 @@ public class DBApp implements DBAppInterface {
         int hi = pages.size() - 1;
         while (lo <= hi) {
             int mid = (lo + hi) / 2;
-            if (compareClusteringValues(clusteringObject, pages.get(mid).getMinClusteringValue()) >= 0
-                    && compareClusteringValues(clusteringObject, pages.get(mid).getMaxClusteringValue()) <= 0) {
+            if (compare(clusteringObject, pages.get(mid).getMinClusteringValue()) >= 0
+                    && compare(clusteringObject, pages.get(mid).getMaxClusteringValue()) <= 0) {
                 return mid;
-            } else if (compareClusteringValues(clusteringObject, pages.get(mid).getMinClusteringValue()) <= 0) {
+            } else if (compare(clusteringObject, pages.get(mid).getMinClusteringValue()) <= 0) {
                 hi = mid - 1;
             } else {
                 lo = mid + 1;
             }
         }
-        return hi+pages.size();
+        return hi + 1 + pages.size();
     }
 
     private int searchInsidePage(Vector<Hashtable<String, Object>> page, Object clusteringObject, String clusteringCol) {
@@ -474,18 +451,18 @@ public class DBApp implements DBAppInterface {
         int hi = page.size() - 1;
         while (lo <= hi) {
             int mid = (lo + hi) / 2;
-            if (compareClusteringValues(clusteringObject, page.get(mid).get(clusteringCol)) == 0) {
+            if (compare(clusteringObject, page.get(mid).get(clusteringCol)) == 0) {
                 return mid;
-            } else if (compareClusteringValues(clusteringObject, page.get(mid).get(clusteringCol)) < 0) {
+            } else if (compare(clusteringObject, page.get(mid).get(clusteringCol)) < 0) {
                 hi = mid - 1;
             } else {
                 lo = mid + 1;
             }
         }
-        return hi+page.size();
+        return hi + 1 + page.size();
     }
 
-    private int compareClusteringValues(Object clusteringObject1, Object clusteringObject2) {
+    private int compare(Object clusteringObject1, Object clusteringObject2) {
         if (clusteringObject1 instanceof java.lang.Integer) {
             return ((Integer) clusteringObject1).compareTo((Integer) clusteringObject2);
         } else if (clusteringObject1 instanceof java.lang.Double) {
@@ -497,17 +474,6 @@ public class DBApp implements DBAppInterface {
         }
     }
 
-    /**
-     * saves the table to the disk
-     *
-     * @throws IOException If an I/O error occurred
-     */
-    private void save(String path) throws IOException {
-        File f = new File(path);
-        ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(f));
-        oos.writeObject(this);
-        oos.close();
-    }
 
     /**
      * deletes the table's file on the disk
@@ -530,12 +496,8 @@ public class DBApp implements DBAppInterface {
         //validate table , get clusteringKey
         String clusteringKey = validateExistingTable(tableName);
         //Read the table from disk
-        String tablePath = "src/main/resources/Tables/" + tableName + ".ser";
-        FileInputStream serializedFile = new FileInputStream(tablePath);
-        ObjectInputStream in = new ObjectInputStream(serializedFile);
-        Table targetTable = (Table) in.readObject();
-        in.close();
-        serializedFile.close();
+        String tablePath = "src/main/resources/data/Tables/" + tableName + ".ser";
+        Table targetTable = (Table) deserializeObject(tablePath);
         //validate columns names and values??
 
         //check if the clustering key exists in the entries
@@ -549,7 +511,45 @@ public class DBApp implements DBAppInterface {
             throw new DBAppException("No Rows matching the entries were found");
         //update the table's file in disk
         delete(tablePath);
-        save(tablePath);
+        serializeObject(targetTable, tablePath);
+    }
+
+    /**
+     * deletes all rows that matches ALL of the specified entries(AND operator) from the page
+     * returns 0 if no rows are deleted,-1 if all rows are deleted and 1 if some (but not all) rows are deleted
+     * @param columnNameValue the column key-value pairs to which records will be compared with
+     * @param clusteringKey   the clustering key of the page's table
+     * @throws ClassNotFoundException If an error occurred in the stored table pages format
+     * @throws IOException            If an I/O error occurred
+     * @throws DBAppException         If an an error occurred in the table(table not found,types don't match,...)
+     */
+    public int deleteFromPage(Page p, Hashtable<String, Object> columnNameValue, String clusteringKey) throws IOException, ClassNotFoundException {
+        //read the page from disk
+        Vector<Hashtable<String, Object>> rows = (Vector<Hashtable<String, Object>>) deserializeObject(p.getPath());
+
+        int state = 0;//return state
+        //iterate through the page to compare
+        Iterator<Hashtable<String, Object>> rowsIterator = rows.iterator();
+        while (rowsIterator.hasNext()) {
+            boolean delete = true;
+            Hashtable<String, Object> curRow = rowsIterator.next();
+            //compare all entries of the row to be deleted with the current row's entries
+            for (String key : columnNameValue.keySet())
+                delete &= curRow.containsKey(key) && compare(curRow.get(key), columnNameValue.get(key)) == 0;//checks if the curRow contains the key and the values match
+
+            if (delete) {
+                rowsIterator.remove();
+                state = 1;
+            }
+        }
+        delete(p.getPath());
+        if (rows.isEmpty())
+            return -1;
+        serializeObject(rows, p.getPath());
+        //update the max and min clustering keys
+        p.setMaxClusteringValue(rows.get(rows.size() - 1).get(clusteringKey));
+        p.setMinClusteringValue(rows.get(0).get(clusteringKey));
+        return state;
     }
 
     /**
@@ -569,16 +569,14 @@ public class DBApp implements DBAppInterface {
         boolean deletedRows = false;//is set to true if some rows are deleted
         while (pagesIterator.hasNext()) {
             Page p = pagesIterator.next();
-            int state = p.delete(columnNameValue, clusteringKey);//returns -1 if the page becomes empty
+            int state = deleteFromPage(p, columnNameValue, clusteringKey);//returns -1 if the page becomes empty
             //update the page's file in disk
-            delete(p.getPath());
             if (state == -1) {
                 //if the page is empty , dont save the page to disk and remove it from the vector
                 pagesIterator.remove();
                 deletedRows = true;
             } else {
                 deletedRows |= state == 1;
-                save(p.getPath());
             }
         }
         return deletedRows;
@@ -601,21 +599,20 @@ public class DBApp implements DBAppInterface {
         if (index >= pages.size())//row not found
             return false;
         Page page = pages.get(index);//page that contains the row to delete
-        int state = page.delete(columnNameValue, clusteringKey);//returns -1 if the page is empty
+        int state = deleteFromPage(page, columnNameValue, clusteringKey);//returns -1 if the page is empty
         //update the page's file in disk
-        delete(page.getPath());
+
         if (state == -1) {
             //if the page is empty , dont save the page to disk and remove it from the vector
             pages.remove(index);
             return true;
         }
-        save(page.getPath());
         return state == 1;
     }
 
     @Override
     public Iterator selectFromTable(SQLTerm[] sqlTerms, String[] arrayOperators) throws IOException, DBAppException, ClassNotFoundException {
-        if (sqlTerms.length != arrayOperators.length - 1)
+        if (sqlTerms.length - 1 != arrayOperators.length)
             throw new DBAppException("Number of terms and operators does not match.");
         String targetTableName = sqlTerms[0].getTableName();
         validateArrayOperators(arrayOperators);
@@ -623,7 +620,7 @@ public class DBApp implements DBAppInterface {
         validateTerms(sqlTerms);
 
         // getting the table Object we want to select from
-        FileInputStream serializedFile = new FileInputStream("src/main/resources/Tables/" + targetTableName + ".ser");
+        FileInputStream serializedFile = new FileInputStream("src/main/resources/data/Tables/" + targetTableName + ".ser");
         ObjectInputStream in = new ObjectInputStream(serializedFile);
         Table targetTable = (Table) in.readObject();
         in.close();
@@ -873,7 +870,6 @@ public class DBApp implements DBAppInterface {
     }
 
 
-
     private Object[] validateUpdateInput(String tableName, String clusteringKeyValue,
                                          Hashtable<String, Object> columnNameValue) throws IOException, ParseException, DBAppException, ClassNotFoundException {
         FileReader metadata = new FileReader("src/main/resources/metadata.csv");
@@ -978,10 +974,13 @@ public class DBApp implements DBAppInterface {
                     }
                     break;
                 default:
-                    if (((String) columnNameValue.get(key)).compareTo((String) colMin.get(key)) < 0) {
+                    if (compareString(((String) columnNameValue.get(key)),((String) colMin.get(key))) < 0) {
                         throw new DBAppException("Value for column " + key + " is below the minimum allowed");
                     }
-                    if (((String) columnNameValue.get(key)).compareTo((String) colMax.get(key)) > 0) {
+                    if (compareString(((String) columnNameValue.get(key)),((String) colMax.get(key))) > 0) {
+
+                        System.err.println((String) columnNameValue.get(key) + " "+((String) colMax.get(key)) + " ");
+                        System.err.println(compareString(((String) columnNameValue.get(key)),((String) colMax.get(key))));
                         throw new DBAppException("Value for column " + key + " is above the maximum allowed");
                     }
                     break;
@@ -989,9 +988,18 @@ public class DBApp implements DBAppInterface {
         }
         return new Object[]{clusteringCol, clusteringObject};
     }
+    public static void main(String[] args) throws DBAppException, IOException, ClassNotFoundException {
+
+    }
 
 
-    public static void main(String[] args) throws DBAppException {
+    private int compareString(String a, String b){
+
+        if(a.length() > b.length())
+            return 1;
+        if(a.length() < b.length())
+            return -1;
+        return a.compareTo(b);
 
     }
 }

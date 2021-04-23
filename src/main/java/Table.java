@@ -4,6 +4,7 @@ import java.util.Vector;
 public class Table implements Serializable {
     private String tableName;
     private Vector<Page> pages;
+    private int pagesCounter;
 
     public Table(String tableName) {
         this.tableName = tableName;
@@ -24,6 +25,14 @@ public class Table implements Serializable {
 
     public void setPages(Vector<Page> pages) {
         this.pages = pages;
+    }
+
+    public int getPagesCounter() {
+        return pagesCounter;
+    }
+
+    public void setPagesCounter(int pagesCounter) {
+        this.pagesCounter = pagesCounter;
     }
 
 }
