@@ -198,7 +198,7 @@ public class DBApp implements DBAppInterface {
         }
     }
 
-    public void createAndSerializePage(Table table, Hashtable<String, Object> colNameValue, String primaryKey, int index) {
+    public void createAndSerializePage(Table table, Hashtable<String, Object> colNameValue, String primaryKey, int index) throws IOException {
 
         String pagePath = "src/main/resources/data/Tables/" + table.getTableName() + "/page" + table.getPagesCounter() + ".ser";
         table.setPagesCounter(table.getPagesCounter() + 1);
@@ -215,7 +215,7 @@ public class DBApp implements DBAppInterface {
 
     }
 
-    private void insertRecordInPlace(int idxOfRecord, Hashtable<String, Object> colNameValue, String primaryKey, Vector<Hashtable<String, Object>> pageRecords, Page curPage) {
+    private void insertRecordInPlace(int idxOfRecord, Hashtable<String, Object> colNameValue, String primaryKey, Vector<Hashtable<String, Object>> pageRecords, Page curPage) throws IOException {
         idxOfRecord -= curPage.getNumOfRecords();
         pageRecords.add(idxOfRecord, colNameValue);
         curPage.setMinClusteringValue(pageRecords.get(0).get(primaryKey));
@@ -225,7 +225,7 @@ public class DBApp implements DBAppInterface {
         serializeObject(pageRecords, curPage.getPath());
     }
 
-    private void createNewPageAndShift(Table table, Hashtable<String, Object> colNameValue, Vector<Hashtable<String, Object>> pageRecords, String primaryKey, int idxOfPreviousPage) {
+    private void createNewPageAndShift(Table table, Hashtable<String, Object> colNameValue, Vector<Hashtable<String, Object>> pageRecords, String primaryKey, int idxOfPreviousPage) throws IOException {
 
         String newPagePath = "src/main/resources/data/Tables/" + table.getTableName() + "/page" + table.getPagesCounter() + ".ser";
         table.setPagesCounter(table.getPagesCounter() + 1);
@@ -257,30 +257,21 @@ public class DBApp implements DBAppInterface {
 
     }
 
-    private void serializeObject(Object o, String path) {
-        try {
-            FileOutputStream fileOut = new FileOutputStream(path);
-            ObjectOutputStream objectOut = new ObjectOutputStream(fileOut);
-            objectOut.writeObject(o);
-            objectOut.close();
-            fileOut.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+    private void serializeObject(Object o, String path) throws IOException {
+        FileOutputStream fileOut = new FileOutputStream(path);
+        ObjectOutputStream objectOut = new ObjectOutputStream(fileOut);
+        objectOut.writeObject(o);
+        objectOut.close();
+        fileOut.close();
     }
 
-    private Object deserializeObject(String path) {
+    private Object deserializeObject(String path) throws IOException, ClassNotFoundException {
         Object o = null;
-        try {
-            FileInputStream fileIn = new FileInputStream(path);
-            ObjectInputStream objectIn = new ObjectInputStream(fileIn);
-            o = objectIn.readObject();
-            objectIn.close();
-            fileIn.close();
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        FileInputStream fileIn = new FileInputStream(path);
+        ObjectInputStream objectIn = new ObjectInputStream(fileIn);
+        o = objectIn.readObject();
+        objectIn.close();
+        fileIn.close();
         return o;
     }
 
@@ -325,7 +316,7 @@ public class DBApp implements DBAppInterface {
                 primaryKeyExist = colNameValue.get(record[1]) != null;
                 primaryKey = record[1];
             }
-            if(!colNameValue.containsKey(record[1]))
+            if (!colNameValue.containsKey(record[1]))
                 continue;
             Class c = colNameValue.get(record[1]).getClass();
             if ((c.getName()).equals(record[2])) {
@@ -340,7 +331,7 @@ public class DBApp implements DBAppInterface {
                     case "java.lang.String": {
                         String min = record[5];
                         String max = record[6];
-                        if (!(compareString((String) colNameValue.get(record[1]),min) >= 0 &&compareString((String) colNameValue.get(record[1]),max) <= 0))
+                        if (!(compareString((String) colNameValue.get(record[1]), min) >= 0 && compareString((String) colNameValue.get(record[1]), max) <= 0))
                             valid = false;
                         break;
                     }
@@ -473,7 +464,9 @@ public class DBApp implements DBAppInterface {
 
 
     /**
-     * deletes the table's file on the disk
+     * deletes the file from the disk
+     *
+     * @param path the path of the file to be deleted.
      */
     public boolean delete(String path) {
         File f = new File(path);
@@ -482,7 +475,7 @@ public class DBApp implements DBAppInterface {
 
     @Override
     /**
-     * deletes all rows that matches ALL of the specified entries (AND operator) from the table
+     * deletes all rows that matches ALL of the specified entries (AND operator) from the table.
      * @param tableName name of the table to delete the rows from
      * @param columnNameValue the entries to which rows will be compared with
      * @throws ClassNotFoundException If an error occurred in the stored table pages format
@@ -512,13 +505,13 @@ public class DBApp implements DBAppInterface {
     }
 
     /**
-     * deletes all rows that matches ALL of the specified entries(AND operator) from the page
-     * returns 0 if no rows are deleted,-1 if all rows are deleted and 1 if some (but not all) rows are deleted
+     * deletes all rows that matches ALL of the specified entries(AND operator) from the page.
+     * returns 0 if no rows are deleted,-1 if all rows are deleted and 1 if some (but not all) rows are deleted.
+     *
      * @param columnNameValue the column key-value pairs to which records will be compared with
      * @param clusteringKey   the clustering key of the page's table
      * @throws ClassNotFoundException If an error occurred in the stored table pages format
      * @throws IOException            If an I/O error occurred
-     * @throws DBAppException         If an an error occurred in the table(table not found,types don't match,...)
      */
     public int deleteFromPage(Page p, Hashtable<String, Object> columnNameValue, String clusteringKey) throws IOException, ClassNotFoundException {
         //read the page from disk
@@ -543,27 +536,27 @@ public class DBApp implements DBAppInterface {
         if (rows.isEmpty())
             return -1;
         serializeObject(rows, p.getPath());
-        //update the max and min clustering keys
+        //update the max, min clustering keys and the number of records
+        p.setNumOfRecords(rows.size());
         p.setMaxClusteringValue(rows.get(rows.size() - 1).get(clusteringKey));
         p.setMinClusteringValue(rows.get(0).get(clusteringKey));
         return state;
     }
 
     /**
-     * searches for the rows that match the entries using linear search and deletes them
-     * returns true if some rows are deleted
+     * searches for the rows that match the entries using linear search and deletes them.
+     * returns true if any rows are deleted.
      *
      * @param table           the table to delete the rows from
      * @param columnNameValue the entries to which rows will be compared with
      * @param clusteringKey   the clustering key of the table
      * @throws ClassNotFoundException If an error occurred in the stored table pages format
      * @throws IOException            If an I/O error occurred
-     * @throws DBAppException         If an an error occurred in the table(table not found,types don't match,...)
      */
     private boolean deleteFromTableLinearSearch(Table table, Hashtable<String, Object> columnNameValue, String clusteringKey) throws IOException, ClassNotFoundException {
         Vector<Page> pages = table.getPages();
         Iterator<Page> pagesIterator = pages.iterator();
-        boolean deletedRows = false;//is set to true if some rows are deleted
+        boolean deletedRows = false;//is set to true if any rows are deleted
         while (pagesIterator.hasNext()) {
             Page p = pagesIterator.next();
             int state = deleteFromPage(p, columnNameValue, clusteringKey);//returns -1 if the page becomes empty
@@ -580,8 +573,8 @@ public class DBApp implements DBAppInterface {
     }
 
     /**
-     * searches for the row that contains the specified clustering value and deletes it
-     * returns true if the row is deleted
+     * searches for the row that contains the specified clustering value and deletes it.
+     * returns true if the row is deleted.
      *
      * @param table           name of the table to delete the rows from
      * @param columnNameValue the entries to which records will be compared with
@@ -597,10 +590,8 @@ public class DBApp implements DBAppInterface {
             return false;
         Page page = pages.get(index);//page that contains the row to delete
         int state = deleteFromPage(page, columnNameValue, clusteringKey);//returns -1 if the page is empty
-        //update the page's file in disk
-
         if (state == -1) {
-            //if the page is empty , dont save the page to disk and remove it from the vector
+            //if the page is empty,remove it from the vector
             pages.remove(index);
             return true;
         }
@@ -971,10 +962,10 @@ public class DBApp implements DBAppInterface {
                     }
                     break;
                 default:
-                    if (compareString(((String) columnNameValue.get(key)),((String) colMin.get(key))) < 0) {
+                    if (compareString(((String) columnNameValue.get(key)), ((String) colMin.get(key))) < 0) {
                         throw new DBAppException("Value for column " + key + " is below the minimum allowed");
                     }
-                    if (compareString(((String) columnNameValue.get(key)),((String) colMax.get(key))) > 0) {
+                    if (compareString(((String) columnNameValue.get(key)), ((String) colMax.get(key))) > 0) {
                         throw new DBAppException("Value for column " + key + " is above the maximum allowed");
                     }
                     break;
@@ -982,14 +973,16 @@ public class DBApp implements DBAppInterface {
         }
         return new Object[]{clusteringCol, clusteringObject};
     }
+
     public static void main(String[] args) throws DBAppException, IOException, ClassNotFoundException {
 
     }
-    private int compareString(String a, String b){
 
-        if(a.length() > b.length())
+    private int compareString(String a, String b) {
+
+        if (a.length() > b.length())
             return 1;
-        if(a.length() < b.length())
+        if (a.length() < b.length())
             return -1;
         return a.compareTo(b);
 
