@@ -1,5 +1,3 @@
-import java.io.FileNotFoundException;
-import java.io.IOException;
 import java.io.IOException;
 import java.text.ParseException;
 import java.util.Hashtable;
@@ -7,7 +5,7 @@ import java.util.Iterator;
 
 public interface DBAppInterface {
 
-    void init() throws FileNotFoundException;
+    void init();
 
     void createTable(String tableName, String clusteringKey, Hashtable<String,String> colNameType, Hashtable<String,String> colNameMin, Hashtable<String,String> colNameMax) throws DBAppException;
 
