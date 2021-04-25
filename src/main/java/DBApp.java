@@ -98,9 +98,6 @@ public class DBApp implements DBAppInterface {
             Table t = (Table) deserializeObject("src/main/resources/data/Tables/" + tableName + ".ser");
             Vector<Page> pages = t.getPages();
             int idxOfPage = searchForPage(pages, colNameValue.get(primaryKey));
-            if(colNameValue.get("course_name").equals("pAYqDr")){
-                System.out.println("DONE");
-            }
             if (pages.size() == 0) {
                 //empty table
                 createAndSerializePage(t, colNameValue, primaryKey, 0);
@@ -116,7 +113,7 @@ public class DBApp implements DBAppInterface {
                 Vector<Hashtable<String, Object>> pageRecords = (Vector<Hashtable<String, Object>>) deserializeObject(curPage.getPath());
                 int idxOfRecord = searchInsidePage(pageRecords, colNameValue.get(primaryKey), primaryKey);
                 if (idxOfRecord < pageRecords.size())
-                    throw new DBAppException("The record already exists in the table." + "Tried to insert: " + colNameValue.get(primaryKey));
+                    throw new DBAppException("The record already exists in the table.");
                 if (pageRecords.size() == maxCountInPage) {
                     //Page is full. Check the following page.
                     if (idxOfPage + 1 < pages.size()) {
@@ -508,7 +505,7 @@ public class DBApp implements DBAppInterface {
         else
             deleted = deleteFromTableLinearSearch(targetTable, columnNameValue, clusteringKey);// linear deletion
         if (!deleted)
-            throw new DBAppException("No Rows matching the entries were found");
+            throw new DBAppException("No Rows matching the entries were found. Row: " + columnNameValue);
         //update the table's file in disk
         delete(tablePath);
         serializeObject(targetTable, tablePath);
@@ -978,9 +975,6 @@ public class DBApp implements DBAppInterface {
                         throw new DBAppException("Value for column " + key + " is below the minimum allowed");
                     }
                     if (compareString(((String) columnNameValue.get(key)),((String) colMax.get(key))) > 0) {
-
-                        System.err.println((String) columnNameValue.get(key) + " "+((String) colMax.get(key)) + " ");
-                        System.err.println(compareString(((String) columnNameValue.get(key)),((String) colMax.get(key))));
                         throw new DBAppException("Value for column " + key + " is above the maximum allowed");
                     }
                     break;
@@ -991,8 +985,6 @@ public class DBApp implements DBAppInterface {
     public static void main(String[] args) throws DBAppException, IOException, ClassNotFoundException {
 
     }
-
-
     private int compareString(String a, String b){
 
         if(a.length() > b.length())
