@@ -9,16 +9,22 @@ public class DBApp implements DBAppInterface {
     @Override
     public void init() {
         File tablesDirectory = new File("src/main/resources/data/Tables");
-        tablesDirectory.mkdir();
-//        try {
-//            FileWriter metaDataFile = new FileWriter("src/main/resources/metadata.csv");
-//            StringBuilder tableMetaData = new StringBuilder();
-//            tableMetaData.append("Table Name,Column Name,Column Type,ClusteringKey,Indexed,min,max");
-//            metaDataFile.write(tableMetaData.toString());
-//            metaDataFile.close();
-//        } catch (IOException e) {
-//            e.printStackTrace();
-//        }
+        if (!tablesDirectory.exists())
+            tablesDirectory.mkdirs();
+
+        try {
+            FileReader oldMetaDataFile = new FileReader("src/main/resources/metadata.csv");
+            BufferedReader br = new BufferedReader(oldMetaDataFile);
+            if (br.readLine() == null) {
+                FileWriter metaDataFile = new FileWriter("src/main/resources/metadata.csv");
+                StringBuilder tableMetaData = new StringBuilder();
+                tableMetaData.append("Table Name,Column Name,Column Type,ClusteringKey,Indexed,min,max");
+                metaDataFile.write(tableMetaData.toString());
+                metaDataFile.close();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     @Override
@@ -331,7 +337,7 @@ public class DBApp implements DBAppInterface {
                     case "java.lang.String": {
                         String min = record[5];
                         String max = record[6];
-                        if (!(compareString((String) colNameValue.get(record[1]), min) >= 0 && compareString((String) colNameValue.get(record[1]), max) <= 0))
+                        if (!(((String) colNameValue.get(record[1])).compareTo(min) >= 0 && ((String) colNameValue.get(record[1])).compareTo(max) <= 0))
                             valid = false;
                         break;
                     }
@@ -474,14 +480,6 @@ public class DBApp implements DBAppInterface {
     }
 
     @Override
-    /**
-     * deletes all rows that matches ALL of the specified entries (AND operator) from the table.
-     * @param tableName name of the table to delete the rows from
-     * @param columnNameValue the entries to which rows will be compared with
-     * @throws ClassNotFoundException If an error occurred in the stored table pages format
-     * @throws IOException If an I/O error occurred
-     * @throws DBAppException If an an error occurred in the table(No rows are deleted,table not found,types don't match,...)
-     */
     public void deleteFromTable(String tableName, Hashtable<String, Object> columnNameValue) throws DBAppException, IOException, ClassNotFoundException {
         //validate table , get clusteringKey
         String clusteringKey = validateExistingTable(tableName);
@@ -897,6 +895,9 @@ public class DBApp implements DBAppInterface {
 
         checkColumnsCompatibility(columnNameValue, colDataTypes);
         checkValuesRanges(columnNameValue, colDataTypes, colMin, colMax);
+        if(columnNameValue.get(clusteringCol) != null){
+            throw new DBAppException("Cannot update clustering cloumn.");
+        }
         return new Object[]{clusteringCol, clusteringObject};
     }
 
@@ -928,10 +929,10 @@ public class DBApp implements DBAppInterface {
                     }
                     break;
                 default:
-                    if (compareString(((String) columnNameValue.get(key)), ((String) colMin.get(key))) < 0) {
+                    if (((String) columnNameValue.get(key)).compareTo((String) colMin.get(key)) < 0) {
                         throw new DBAppException("Value for column " + key + " is below the minimum allowed. Min: " + colMin.get(key) + ". Found: " + columnNameValue.get(key));
                     }
-                    if (compareString(((String) columnNameValue.get(key)), ((String) colMax.get(key))) > 0) {
+                    if (((String) columnNameValue.get(key)).compareTo((String) colMax.get(key)) > 0) {
                         throw new DBAppException("Value for column " + key + " is above the maximum allowed. Max: " + colMax.get(key) + ". Found: " + columnNameValue.get(key));
                     }
                     break;
@@ -952,7 +953,8 @@ public class DBApp implements DBAppInterface {
     }
 
     /**
-     *Returns an array containing useful info about the passed table in the parameter.
+     * Returns an array containing useful info about the passed table in the parameter.
+     *
      * @param tableName name of the table that the method will use to retrieve data from metadata.csv
      * @return Array of objects.
      * <ul>
@@ -1002,7 +1004,7 @@ public class DBApp implements DBAppInterface {
                 }
             }
         }
-        return new Object[] {colDataTypes, colMin, colMax, clusteringType, clusteringCol};
+        return new Object[]{colDataTypes, colMin, colMax, clusteringType, clusteringCol};
     }
 
     public static void main(String[] args) throws DBAppException, IOException, ClassNotFoundException {
