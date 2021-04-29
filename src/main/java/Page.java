@@ -1,7 +1,7 @@
 import java.io.*;
 import java.util.*;
 
-public class Page implements Serializable{
+public class Page implements Serializable {
     private String path;
     private Object minClusteringValue;
     private Object maxClusteringValue;
@@ -41,22 +41,5 @@ public class Page implements Serializable{
 
     public void setNumOfRecords(int numOfRecords) {
         this.numOfRecords = numOfRecords;
-    }
-
-
-
-    /**
-     * compares two objects assuming they are an instance of the same class
-     */
-    public int compare(Object object1, Object object2) {
-        if (object1 instanceof java.lang.Integer) {
-            return ((Integer) object1).compareTo((Integer) object2);
-        } else if (object1 instanceof java.lang.Double) {
-            return ((Double) object1).compareTo((Double) object2);
-        } else if (object1 instanceof java.util.Date) {
-            return ((Date) object1).compareTo((Date) object2);
-        } else {
-            return ((String) object1).compareTo((String) object2);
-        }
     }
 }

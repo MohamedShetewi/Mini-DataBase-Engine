@@ -480,14 +480,21 @@ public class DBApp implements DBAppInterface {
     }
 
     @Override
-    public void deleteFromTable(String tableName, Hashtable<String, Object> columnNameValue) throws DBAppException, IOException, ClassNotFoundException {
-        //validate table , get clusteringKey
-        String clusteringKey = validateExistingTable(tableName);
+    /**
+     * deletes all rows that matches ALL of the specified entries (AND operator) from the table.
+     * @param tableName name of the table to delete the rows from
+     * @param columnNameValue the entries to which rows will be compared with
+     * @throws ClassNotFoundException If an error occurred in the stored table pages format
+     * @throws IOException If an I/O error occurred
+     * @throws DBAppException If an an error occurred in the table(No rows are deleted,table not found,types don't match,...)
+     * @throws ParseException If an error occurred while parsing the input
+     */
+    public void deleteFromTable(String tableName, Hashtable<String, Object> columnNameValue) throws DBAppException, IOException, ClassNotFoundException, ParseException {
+        //validate input, get clusteringKey
+        String clusteringKey = validateDeleteFromTable(tableName, columnNameValue);
         //Read the table from disk
         String tablePath = "src/main/resources/data/Tables/" + tableName + ".ser";
         Table targetTable = (Table) deserializeObject(tablePath);
-        //validate columns names and values??
-
         //check if the clustering key exists in the entries
         boolean clusteringKeyExists = columnNameValue.get(clusteringKey) != null;
         boolean deleted;
@@ -503,18 +510,39 @@ public class DBApp implements DBAppInterface {
     }
 
     /**
+     * validates the input values by checking that the entries' values are in the range and their types are compatible.
+     *
+     * @param tableName       the name of the table to get the max,min and data types from.
+     * @param columnNameValue the entries to validate.
+     * @return the name of the clustering key column
+     * @throws ClassNotFoundException If an error occurred in the stored table pages format
+     * @throws IOException            If an I/O error occurred
+     * @throws DBAppException         If an an error occurred in the table(No rows are deleted,table not found,types don't match,...)
+     * @throws ParseException         If an error occurred while parsing the input
+     */
+    private String validateDeleteFromTable(String tableName, Hashtable<String, Object> columnNameValue) throws IOException, ParseException, DBAppException, ClassNotFoundException {
+        Object[] tableInfo = getTableInfo(tableName);
+        Hashtable<String, String> colDataTypes = (Hashtable<String, String>) tableInfo[0];
+        Hashtable<String, Object> colMin = (Hashtable<String, Object>) tableInfo[1];
+        Hashtable<String, Object> colMax = (Hashtable<String, Object>) tableInfo[2];
+        String clusteringCol = (String) tableInfo[4];
+        checkColumnsCompatibility(columnNameValue, colDataTypes);
+        checkValuesRanges(columnNameValue, colDataTypes, colMin, colMax);
+        return clusteringCol;
+    }
+
+    /**
      * deletes all rows that matches ALL of the specified entries(AND operator) from the page.
-     * returns 0 if no rows are deleted,-1 if all rows are deleted and 1 if some (but not all) rows are deleted.
      *
      * @param columnNameValue the column key-value pairs to which records will be compared with
      * @param clusteringKey   the clustering key of the page's table
+     * @return 0 if no rows are deleted,-1 if all rows are deleted and 1 if some (but not all) rows are deleted.
      * @throws ClassNotFoundException If an error occurred in the stored table pages format
      * @throws IOException            If an I/O error occurred
      */
     private int deleteFromPage(Page p, Hashtable<String, Object> columnNameValue, String clusteringKey) throws IOException, ClassNotFoundException {
         //read the page from disk
         Vector<Hashtable<String, Object>> rows = (Vector<Hashtable<String, Object>>) deserializeObject(p.getPath());
-
         int state = 0;//return state
         //iterate through the page to compare
         Iterator<Hashtable<String, Object>> rowsIterator = rows.iterator();
@@ -543,11 +571,11 @@ public class DBApp implements DBAppInterface {
 
     /**
      * searches for the rows that match the entries using linear search and deletes them.
-     * returns true if any rows are deleted.
      *
      * @param table           the table to delete the rows from
      * @param columnNameValue the entries to which rows will be compared with
      * @param clusteringKey   the clustering key of the table
+     * @return true if any rows are deleted.
      * @throws ClassNotFoundException If an error occurred in the stored table pages format
      * @throws IOException            If an I/O error occurred
      */
@@ -572,11 +600,11 @@ public class DBApp implements DBAppInterface {
 
     /**
      * searches for the row that contains the specified clustering value and deletes it.
-     * returns true if the row is deleted.
      *
      * @param table           name of the table to delete the rows from
      * @param columnNameValue the entries to which records will be compared with
      * @param clusteringKey   the clustering key of the table
+     * @return true if the row is deleted.
      * @throws ClassNotFoundException If an error occurred in the stored table pages format
      * @throws IOException            If an I/O error occurred
      * @throws DBAppException         If an an error occurred in the table(table not found,types don't match,...)
@@ -1004,7 +1032,7 @@ public class DBApp implements DBAppInterface {
                 }
             }
         }
-        return new Object[]{colDataTypes, colMin, colMax, clusteringType, clusteringCol};
+        return new Object[] {colDataTypes, colMin, colMax, clusteringType, clusteringCol};
     }
 
     public static void main(String[] args) throws DBAppException, IOException, ClassNotFoundException {
