@@ -634,12 +634,8 @@ public class DBApp implements DBAppInterface {
         validateTerms(sqlTerms);
 
         // getting the table Object we want to select from
-        FileInputStream serializedFile = new FileInputStream("src/main/resources/data/Tables/" + targetTableName + ".ser");
-        ObjectInputStream in = new ObjectInputStream(serializedFile);
-        Table targetTable = (Table) in.readObject();
-        in.close();
-        serializedFile.close();
-        //
+        Table targetTable = (Table) deserializeObject("src/main/resources/data/Tables/" + targetTableName + ".ser");
+
         Vector<Page> tablePages = targetTable.getPages();
         Stack<Vector<Hashtable<String, Object>>> termsSets = new Stack<>();
         for (int i = sqlTerms.length - 1; i >= 0; i--) {
@@ -667,8 +663,6 @@ public class DBApp implements DBAppInterface {
                     termsSets.push(aXorB);
                     break;
             }
-
-
         }
 
         Vector<Hashtable<String, Object>> queryResult;
@@ -686,11 +680,14 @@ public class DBApp implements DBAppInterface {
     private Vector<Hashtable<String, Object>> rowsDifference(Vector<Hashtable<String, Object>> a, Vector<Hashtable<String, Object>> b, String clusteringColumnName) {
         Vector<Hashtable<String, Object>> resultOfDifference = new Vector<>();
         for (Hashtable<String, Object> rowA : a) {
+            boolean found = false;
             for (Hashtable<String, Object> rowB : b) {
-                if (!rowA.get(clusteringColumnName).equals(rowB.get(clusteringColumnName))) {
-                    resultOfDifference.add(rowA);
+                if (rowA.get(clusteringColumnName).equals(rowB.get(clusteringColumnName))) {
+                    found = true;
                 }
             }
+            if(!found)
+                resultOfDifference.add(rowA);
         }
         return resultOfDifference;
     }
@@ -698,11 +695,15 @@ public class DBApp implements DBAppInterface {
     private Vector<Hashtable<String, Object>> rowsIntersection(Vector<Hashtable<String, Object>> a, Vector<Hashtable<String, Object>> b, String clusteringColumnName) {
         Vector<Hashtable<String, Object>> resultOfIntersection = new Vector<>();
         for (Hashtable<String, Object> rowA : a) {
+            boolean found = false;
             for (Hashtable<String, Object> rowB : b) {
                 if (rowA.get(clusteringColumnName).equals(rowB.get(clusteringColumnName))) {
-                    resultOfIntersection.add(rowA);
+                    found = true;
+                    break;
                 }
             }
+            if(found)
+                resultOfIntersection.add(rowA);
         }
         return resultOfIntersection;
     }
@@ -725,12 +726,7 @@ public class DBApp implements DBAppInterface {
     private Vector<Hashtable<String, Object>> searchLinearly(SQLTerm term, Vector<Page> tablePages) throws IOException, ClassNotFoundException {
         Vector<Hashtable<String, Object>> result = new Vector<>();
         for (Page page : tablePages) {
-            FileInputStream serializedFile = new FileInputStream(page.getPath());
-            ObjectInputStream in = new ObjectInputStream(serializedFile);
-            Vector<Hashtable<String, Object>> rows = (Vector<Hashtable<String, Object>>) in.readObject();
-            in.close();
-            serializedFile.close();
-
+            Vector<Hashtable<String, Object>> rows = (Vector<Hashtable<String, Object>>) deserializeObject(page.getPath());
             for (Hashtable<String, Object> row : rows)
                 if (booleanValueOfTerm(row, term))
                     result.add(row);
@@ -756,12 +752,7 @@ public class DBApp implements DBAppInterface {
                 lo = mid + 1;
         }
 
-        FileInputStream serializedFile = new FileInputStream(targetPage.getPath());
-        ObjectInputStream in = new ObjectInputStream(serializedFile);
-        Vector<Hashtable<String, Object>> targetPageRows = (Vector<Hashtable<String, Object>>) in.readObject();
-        in.close();
-        serializedFile.close();
-
+        Vector<Hashtable<String, Object>> targetPageRows = (Vector<Hashtable<String, Object>>) deserializeObject(targetPage.getPath());
         if (term.getOperator().equals("=")) {
             lo = 0;
             hi = targetPageRows.size() - 1;
@@ -825,13 +816,13 @@ public class DBApp implements DBAppInterface {
             case "!=":
                 return (term.compareTo(row.get(term.getColumnName())) != 0);
             case ">":
-                return (term.compareTo(row.get(term.getColumnName())) > 0);
-            case ">=":
-                return (term.compareTo(row.get(term.getColumnName())) >= 0);
-            case "<":
                 return (term.compareTo(row.get(term.getColumnName())) < 0);
-            case "<=":
+            case ">=":
                 return (term.compareTo(row.get(term.getColumnName())) <= 0);
+            case "<":
+                return (term.compareTo(row.get(term.getColumnName())) > 0);
+            case "<=":
+                return (term.compareTo(row.get(term.getColumnName())) >= 0);
             default:
                 return false;
         }
@@ -856,8 +847,9 @@ public class DBApp implements DBAppInterface {
     private void validateTerms(SQLTerm[] sqlTerms) throws IOException, DBAppException, ClassNotFoundException {
         String targetTableName = sqlTerms[0].getTableName();
         for (SQLTerm term : sqlTerms) {
-            if (!term.getColumnName().equals(targetTableName))
+            if (!term.getTableName().equals(targetTableName)) {
                 throw new DBAppException("The table name in all terms must be the same.");
+            }
         }
         FileReader metadata = new FileReader("src/main/resources/metadata.csv");
         BufferedReader br = new BufferedReader(metadata);
@@ -1035,15 +1027,22 @@ public class DBApp implements DBAppInterface {
         return new Object[] {colDataTypes, colMin, colMax, clusteringType, clusteringCol};
     }
 
-    public static void main(String[] args) throws DBAppException, IOException, ClassNotFoundException {
+    public static void main(String[] args) throws DBAppException, IOException, ClassNotFoundException, ParseException {
         DBApp dbApp = new DBApp();
 
-        String table = "pcs";
-        Hashtable<String, Object> row = new Hashtable();
-        row.put("pc_id", 18763);
-        row.put("student_id", "57-4782");
+        SQLTerm term1 = new SQLTerm("students", "gpa", ">", 1.0);
+        SQLTerm term2 = new SQLTerm("students", "id", "<=", "59-1317");
+        SQLTerm[] terms = new SQLTerm[] {term1, term2};
 
-        dbApp.insertIntoTable(table, row);
+        String[] operators = new String[] {"OR"};
+
+        Iterator resultSet = dbApp.selectFromTable(terms, operators);
+        int c = 0;
+        while (resultSet.hasNext()){
+            System.out.println(resultSet.next());
+            c++;
+        }
+        System.out.println(c);
     }
 
     private int compareString(String a, String b) {
