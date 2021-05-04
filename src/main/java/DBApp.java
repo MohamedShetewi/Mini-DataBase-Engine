@@ -408,13 +408,15 @@ public class DBApp implements DBAppInterface {
 
         int pageIdx = searchForPage(t.getPages(), clusteringObject);
         if (pageIdx >= t.getPages().size()) {
-            throw new DBAppException("Invalid clustering key value");
+            System.out.println("Invalid clustering key value");
+            return;
         }
         Vector<Hashtable<String, Object>> page = (Vector<Hashtable<String, Object>>) deserializeObject(t.getPages().get(pageIdx).getPath());
 
         int rowIdx = searchInsidePage(page, clusteringObject, clusteringCol);
         if (rowIdx >= page.size()) {
-            throw new DBAppException("Invalid clustering key value");
+            System.out.println("Invalid clustering key value");
+            return;
         }
         for (String key : columnNameValue.keySet()) {
             page.get(rowIdx).replace(key, columnNameValue.get(key));
@@ -502,8 +504,10 @@ public class DBApp implements DBAppInterface {
             deleted = deleteFromTableBinarySearch(targetTable, columnNameValue, clusteringKey);//binary search for the clustering key
         else
             deleted = deleteFromTableLinearSearch(targetTable, columnNameValue, clusteringKey);// linear deletion
-        if (!deleted)
-            throw new DBAppException("No Rows matching the entries were found. Row: " + columnNameValue);
+        if (!deleted) {
+            System.out.println("No Rows matching the entries were found. Row: " + columnNameValue);
+            return;
+        }
         //update the table's file in disk
         delete(tablePath);
         serializeObject(targetTable, tablePath);
@@ -1043,15 +1047,5 @@ public class DBApp implements DBAppInterface {
             c++;
         }
         System.out.println(c);
-    }
-
-    private int compareString(String a, String b) {
-
-        if (a.length() > b.length())
-            return 1;
-        if (a.length() < b.length())
-            return -1;
-        return a.compareTo(b);
-
     }
 }
