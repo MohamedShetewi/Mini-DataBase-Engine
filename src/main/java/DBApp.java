@@ -549,27 +549,41 @@ public class DBApp implements DBAppInterface {
         Vector<Hashtable<String, Object>> rows = (Vector<Hashtable<String, Object>>) deserializeObject(p.getPath());
         int state = 0;//return state
         //iterate through the page to compare
-        Iterator<Hashtable<String, Object>> rowsIterator = rows.iterator();
-        while (rowsIterator.hasNext()) {
-            boolean delete = true;
-            Hashtable<String, Object> curRow = rowsIterator.next();
-            //compare all entries of the row to be deleted with the current row's entries
-            for (String key : columnNameValue.keySet())
-                delete &= curRow.containsKey(key) && compare(curRow.get(key), columnNameValue.get(key)) == 0;//checks if the curRow contains the key and the values match
+        if (columnNameValue.get(clusteringKey) != null) {
+            int idxInsidePage = searchInsidePage(rows, columnNameValue.get(clusteringKey), clusteringKey);
+            if (idxInsidePage < rows.size()) {
+                boolean delete = true;
+                Hashtable<String, Object> curRow = rows.get(idxInsidePage);
+                for (String key : columnNameValue.keySet())
+                    delete &= curRow.containsKey(key) && compare(curRow.get(key), columnNameValue.get(key)) == 0;
+                if (delete) {
+                    rows.remove(idxInsidePage);
+                    state = 1;
+                }
+            }
+        } else {
+            Iterator<Hashtable<String, Object>> rowsIterator = rows.iterator();
+            while (rowsIterator.hasNext()) {
+                boolean delete = true;
+                Hashtable<String, Object> curRow = rowsIterator.next();
+                //compare all entries of the row to be deleted with the current row's entries
+                for (String key : columnNameValue.keySet())
+                    delete &= curRow.containsKey(key) && compare(curRow.get(key), columnNameValue.get(key)) == 0;//checks if the curRow contains the key and the values match
 
-            if (delete) {
-                rowsIterator.remove();
-                state = 1;
+                if (delete) {
+                    rowsIterator.remove();
+                    state = 1;
+                }
             }
         }
         delete(p.getPath());
         if (rows.isEmpty())
             return -1;
-        serializeObject(rows, p.getPath());
         //update the max, min clustering keys and the number of records
         p.setNumOfRecords(rows.size());
         p.setMaxClusteringValue(rows.get(rows.size() - 1).get(clusteringKey));
         p.setMinClusteringValue(rows.get(0).get(clusteringKey));
+        serializeObject(rows, p.getPath());
         return state;
     }
 
@@ -690,7 +704,7 @@ public class DBApp implements DBAppInterface {
                     found = true;
                 }
             }
-            if(!found)
+            if (!found)
                 resultOfDifference.add(rowA);
         }
         return resultOfDifference;
@@ -706,7 +720,7 @@ public class DBApp implements DBAppInterface {
                     break;
                 }
             }
-            if(found)
+            if (found)
                 resultOfIntersection.add(rowA);
         }
         return resultOfIntersection;
@@ -919,7 +933,7 @@ public class DBApp implements DBAppInterface {
 
         checkColumnsCompatibility(columnNameValue, colDataTypes);
         checkValuesRanges(columnNameValue, colDataTypes, colMin, colMax);
-        if(columnNameValue.get(clusteringCol) != null){
+        if (columnNameValue.get(clusteringCol) != null) {
             throw new DBAppException("Cannot update clustering cloumn.");
         }
         return new Object[]{clusteringCol, clusteringObject};
@@ -1028,24 +1042,10 @@ public class DBApp implements DBAppInterface {
                 }
             }
         }
-        return new Object[] {colDataTypes, colMin, colMax, clusteringType, clusteringCol};
+        return new Object[]{colDataTypes, colMin, colMax, clusteringType, clusteringCol};
     }
 
     public static void main(String[] args) throws DBAppException, IOException, ClassNotFoundException, ParseException {
-        DBApp dbApp = new DBApp();
 
-        SQLTerm term1 = new SQLTerm("students", "gpa", ">", 1.0);
-        SQLTerm term2 = new SQLTerm("students", "id", "<=", "59-1317");
-        SQLTerm[] terms = new SQLTerm[] {term1, term2};
-
-        String[] operators = new String[] {"OR"};
-
-        Iterator resultSet = dbApp.selectFromTable(terms, operators);
-        int c = 0;
-        while (resultSet.hasNext()){
-            System.out.println(resultSet.next());
-            c++;
-        }
-        System.out.println(c);
     }
 }
