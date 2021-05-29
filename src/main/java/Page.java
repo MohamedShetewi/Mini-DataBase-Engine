@@ -2,6 +2,7 @@ import java.io.*;
 import java.util.*;
 
 public class Page implements Serializable {
+
     private String path;
     private Object minClusteringValue;
     private Object maxClusteringValue;
