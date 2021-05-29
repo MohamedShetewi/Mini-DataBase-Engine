@@ -2,14 +2,24 @@ import java.io.*;
 import java.util.Vector;
 
 public class Table implements Serializable {
+
     private String tableName;
     private Vector<Page> pages;
     private int pagesCounter;
+    private Vector<Index> indices;
+
 
     public Table(String tableName) {
         this.tableName = tableName;
-        pages = new Vector<>();
+        this.pages = new Vector<>();
+        this.indices = new Vector<>();
+
     }
+
+    public Vector<Index> getIndices() {
+        return indices;
+    }
+
 
     public String getTableName() {
         return tableName;
