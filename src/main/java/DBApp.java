@@ -1,4 +1,5 @@
 import java.io.*;
+import java.lang.reflect.Array;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
@@ -391,9 +392,27 @@ public class DBApp implements DBAppInterface {
     }
 
     @Override
-    public void createIndex(String tableName, String[] columnNames) throws DBAppException {
+    public void createIndex(String tableName, String[] columnNames) throws DBAppException, IOException, ParseException {
+
+
+        String clusteringKey = validateExistingTable(tableName);
+        Object[] tableInfo = getTableInfo(tableName);
+        Hashtable<String,String> columnsInfo = (Hashtable<String, String>) tableInfo[0];
+
+        for (String colName : columnNames)
+            if(!columnsInfo.containsKey(colName))
+                throw new DBAppException("No such column exits!");
+
+        int[]dimensions = new int[columnNames.length];
+        Arrays.fill(dimensions, 10);
+
+        Object gridIndex = Array.newInstance(Vector.class, dimensions);
+        
+
 
     }
+
+
 
 
     @Override
@@ -869,6 +888,7 @@ public class DBApp implements DBAppInterface {
                 throw new DBAppException("The table name in all terms must be the same.");
             }
         }
+
         FileReader metadata = new FileReader("src/main/resources/metadata.csv");
         BufferedReader br = new BufferedReader(metadata);
         String curLine;
@@ -889,7 +909,6 @@ public class DBApp implements DBAppInterface {
             if (!colClass.isInstance(columnValue)) {
                 throw new DBAppException("Incompatible data types");
             }
-
         }
     }
 
