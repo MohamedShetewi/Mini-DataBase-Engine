@@ -1,9 +1,3 @@
-import org.antlr.v4.runtime.CharStreams;
-import org.antlr.v4.runtime.CommonTokenStream;
-import org.antlr.v4.runtime.tree.ParseTree;
-import org.antlr.v4.runtime.tree.ParseTreeWalker;
-
-import java.awt.event.ItemEvent;
 import java.io.*;
 import java.lang.reflect.Array;
 import java.text.ParseException;
@@ -35,7 +29,7 @@ public class DBApp implements DBAppInterface {
     }
 
     @Override
-    public void createTable(String tableName, String clusteringKey, Hashtable<String, String> colNameType, Hashtable<String, String> colNameMin, Hashtable<String, String> colNameMax) throws DBAppException {
+    public void createTable(String tableName, String clusteringKey, Hashtable<String, String> colNameType, Hashtable<String, String> colNameMin, Hashtable<String, String> colNameMax) throws DBAppException, IOException {
 
         //validating input
         for (String col : colNameType.keySet())
@@ -99,6 +93,8 @@ public class DBApp implements DBAppInterface {
             metaDataFile.close();
         } catch (IOException ignored) {
         }
+
+
     }
 
 
@@ -238,6 +234,7 @@ public class DBApp implements DBAppInterface {
         serializeObject(pageRecords, curPage.getPath());
     }
 
+
     private void createNewPageAndShift(Table table, Hashtable<String, Object> colNameValue, Vector<Hashtable<String, Object>> pageRecords, String primaryKey, int idxOfPreviousPage) throws IOException {
 
         String newPagePath = "src/main/resources/data/Tables/" + table.getTableName() + "/page" + table.getPagesCounter() + ".ser";
@@ -278,7 +275,7 @@ public class DBApp implements DBAppInterface {
         fileOut.close();
     }
 
-    private static Object deserializeObject(String path) throws IOException, ClassNotFoundException {
+    private Object deserializeObject(String path) throws IOException, ClassNotFoundException {
         Object o = null;
         FileInputStream fileIn = new FileInputStream(path);
         ObjectInputStream objectIn = new ObjectInputStream(fileIn);
@@ -398,27 +395,71 @@ public class DBApp implements DBAppInterface {
     }
 
     @Override
-    public void createIndex(String tableName, String[] columnNames) throws DBAppException, IOException, ParseException {
-
+    public void createIndex(String tableName, String[] columnNames) throws DBAppException, IOException, ParseException, ClassNotFoundException {
 
         String clusteringKey = validateExistingTable(tableName);
         Object[] tableInfo = getTableInfo(tableName);
-        Hashtable<String,String> columnsInfo = (Hashtable<String, String>) tableInfo[0];
+        Hashtable<String, String> columnsInfo = (Hashtable<String, String>) tableInfo[0];
 
         for (String colName : columnNames)
-            if(!columnsInfo.containsKey(colName))
+            if (!columnsInfo.containsKey(colName))
                 throw new DBAppException("No such column exits!");
 
-        int[]dimensions = new int[columnNames.length];
+        updateMetaDataFile(tableName, columnNames);
+
+        Table table = (Table) deserializeObject("src/main/resources/data/Tables/" + tableName + ".ser");
+        String indexPath = "src/main/resources/data/Tables/" + tableName + "/index" + table.getIndexCounter() + ".ser";
+        table.getIndices().add(new Index(indexPath, columnNames, (Hashtable<String, Object>) tableInfo[1], (Hashtable<String, Object>) tableInfo[2]));
+
+
+        int[] dimensions = new int[columnNames.length];
         Arrays.fill(dimensions, 10);
 
         Object gridIndex = Array.newInstance(Vector.class, dimensions);
-        
-
 
     }
 
 
+    private void updateMetaDataFile(String tableName, String[] indexColumns) throws IOException {
+
+        FileReader oldMetaDataFile = new FileReader("src/main/resources/metadata.csv");
+        BufferedReader br = new BufferedReader(oldMetaDataFile);
+
+        StringBuilder newMetaData = new StringBuilder();
+        String curLine = "";
+
+        while ((curLine = br.readLine()) != null) {
+            String[] curLineSplit = curLine.split(",");
+
+            if (!curLineSplit[0].equals(tableName)) {
+                newMetaData.append(curLine);
+                newMetaData.append("\n");
+                continue;
+            }
+
+            StringBuilder tmpString = new StringBuilder(curLine);
+
+            for (String col : indexColumns) {
+                if (col.equals(curLineSplit[1])) {
+                    tmpString = new StringBuilder();
+                    for (int i = 0; i < curLineSplit.length; i++)
+                        if (i == 4)
+                            tmpString.append("True,");
+                        else if (i == 6)
+                            tmpString.append(curLineSplit[i]);
+                        else
+                            tmpString.append(curLineSplit[i] + ",");
+                }
+            }
+            newMetaData.append(tmpString + "\n");
+        }
+
+        FileWriter metaDataFile = new FileWriter("src/main/resources/metadata.csv");
+        metaDataFile.write(newMetaData.toString());
+        metaDataFile.close();
+
+
+    }
 
 
     @Override
@@ -671,6 +712,7 @@ public class DBApp implements DBAppInterface {
     public Iterator selectFromTable(SQLTerm[] sqlTerms, String[] arrayOperators) throws IOException, DBAppException, ClassNotFoundException {
         if (sqlTerms.length - 1 != arrayOperators.length)
             throw new DBAppException("Number of terms and operators does not match.");
+
         String targetTableName = sqlTerms[0].get_strTableName();
         validateArrayOperators(arrayOperators);
         String clusteringColumnName = validateExistingTable(targetTableName);
@@ -712,6 +754,7 @@ public class DBApp implements DBAppInterface {
         queryResult = termsSets.pop();
         return queryResult.iterator();
     }
+
 
     private Vector<Hashtable<String, Object>> rowsUnion(Vector<Hashtable<String, Object>> a, Vector<Hashtable<String, Object>> b, String clusteringColumnName) {
         Vector<Hashtable<String, Object>> resultOfUnion = new Vector<>();
@@ -781,7 +824,6 @@ public class DBApp implements DBAppInterface {
         Vector<Hashtable<String, Object>> result = new Vector<>();
         int lo = 0;
         int hi = tablePages.size() - 1;
-        //important!!!!
         Page targetPage = tablePages.get(0);
         while (lo <= hi) {
             int mid = (lo + hi) / 2;
@@ -1032,7 +1074,7 @@ public class DBApp implements DBAppInterface {
      * @throws ParseException
      */
 
-    protected Object[] getTableInfo(String tableName) throws IOException, ParseException {
+    Object[] getTableInfo(String tableName) throws IOException, ParseException {
         FileReader metadata = new FileReader("src/main/resources/metadata.csv");
         BufferedReader br = new BufferedReader(metadata);
         String curLine;
@@ -1069,20 +1111,6 @@ public class DBApp implements DBAppInterface {
             }
         }
         return new Object[]{colDataTypes, colMin, colMax, clusteringType, clusteringCol};
-    }
-
-    public Iterator parseSQL( StringBuffer strbufSQL ) throws DBAppException{
-
-        SQLiteLexer lexer = new SQLiteLexer(CharStreams.fromString(strbufSQL.toString()));
-        MiniSQLParser parser = new MiniSQLParser(new CommonTokenStream(lexer));
-        ParserErrorHandler errorHandler = new ParserErrorHandler();
-        parser.setErrorHandler(errorHandler);
-        ParseTree tree = parser.start();
-        ParseTreeWalker walker = new ParseTreeWalker();
-        ParserListener listener = new ParserListener(this);
-        walker.walk(listener, tree);
-
-        return listener.getIterator();
     }
 
     public static void main(String[] args) throws DBAppException, IOException, ClassNotFoundException, ParseException {
