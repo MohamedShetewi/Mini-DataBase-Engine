@@ -1,3 +1,9 @@
+import org.antlr.v4.runtime.CharStreams;
+import org.antlr.v4.runtime.CommonTokenStream;
+import org.antlr.v4.runtime.tree.ParseTree;
+import org.antlr.v4.runtime.tree.ParseTreeWalker;
+
+import java.awt.event.ItemEvent;
 import java.io.*;
 import java.lang.reflect.Array;
 import java.text.ParseException;
@@ -272,7 +278,7 @@ public class DBApp implements DBAppInterface {
         fileOut.close();
     }
 
-    private Object deserializeObject(String path) throws IOException, ClassNotFoundException {
+    private static Object deserializeObject(String path) throws IOException, ClassNotFoundException {
         Object o = null;
         FileInputStream fileIn = new FileInputStream(path);
         ObjectInputStream objectIn = new ObjectInputStream(fileIn);
@@ -665,7 +671,7 @@ public class DBApp implements DBAppInterface {
     public Iterator selectFromTable(SQLTerm[] sqlTerms, String[] arrayOperators) throws IOException, DBAppException, ClassNotFoundException {
         if (sqlTerms.length - 1 != arrayOperators.length)
             throw new DBAppException("Number of terms and operators does not match.");
-        String targetTableName = sqlTerms[0].getTableName();
+        String targetTableName = sqlTerms[0].get_strTableName();
         validateArrayOperators(arrayOperators);
         String clusteringColumnName = validateExistingTable(targetTableName);
         validateTerms(sqlTerms);
@@ -754,7 +760,7 @@ public class DBApp implements DBAppInterface {
     }
 
     private Vector<Hashtable<String, Object>> isValidTerm(SQLTerm term, Vector<Page> tablePages, String clusteringColumnName) throws IOException, ClassNotFoundException {
-        if (term.getColumnName().equals(clusteringColumnName))
+        if (term.get_strColumnName().equals(clusteringColumnName))
             return searchOnClustering(term, tablePages);
         return searchLinearly(term, tablePages);
 
@@ -775,6 +781,7 @@ public class DBApp implements DBAppInterface {
         Vector<Hashtable<String, Object>> result = new Vector<>();
         int lo = 0;
         int hi = tablePages.size() - 1;
+        //important!!!!
         Page targetPage = tablePages.get(0);
         while (lo <= hi) {
             int mid = (lo + hi) / 2;
@@ -790,7 +797,7 @@ public class DBApp implements DBAppInterface {
         }
 
         Vector<Hashtable<String, Object>> targetPageRows = (Vector<Hashtable<String, Object>>) deserializeObject(targetPage.getPath());
-        if (term.getOperator().equals("=")) {
+        if (term.get_strOperator().equals("=")) {
             lo = 0;
             hi = targetPageRows.size() - 1;
             while (lo <= hi) {
@@ -800,7 +807,7 @@ public class DBApp implements DBAppInterface {
                     result.add(curRow);
                     break;
                 }
-                if (term.compareTo(curRow.get(term.getColumnName())) < 0)
+                if (term.compareTo(curRow.get(term.get_strColumnName())) < 0)
                     hi = mid - 1;
                 else
                     lo = mid + 1;
@@ -823,9 +830,9 @@ public class DBApp implements DBAppInterface {
             if (booleanValueOfTerm(row, term))
                 result.add(row);
 
-        if (term.getOperator().equals("<") || term.getOperator().equals("<=")) {
+        if (term.get_strOperator().equals("<") || term.get_strOperator().equals("<=")) {
             addRowsOfPage(result, pagesBeforeTarget);
-        } else if (term.getOperator().equals(">") || term.getOperator().equals(">=")) {
+        } else if (term.get_strOperator().equals(">") || term.get_strOperator().equals(">=")) {
             addRowsOfPage(result, pagesAfterTarget);
         } else {
             addRowsOfPage(result, pagesBeforeTarget);
@@ -847,19 +854,19 @@ public class DBApp implements DBAppInterface {
 
 
     private boolean booleanValueOfTerm(Hashtable<String, Object> row, SQLTerm term) {
-        switch (term.getOperator()) {
+        switch (term.get_strOperator()) {
             case "=":
-                return (term.compareTo(row.get(term.getColumnName())) == 0);
+                return (term.compareTo(row.get(term.get_strColumnName())) == 0);
             case "!=":
-                return (term.compareTo(row.get(term.getColumnName())) != 0);
+                return (term.compareTo(row.get(term.get_strColumnName())) != 0);
             case ">":
-                return (term.compareTo(row.get(term.getColumnName())) < 0);
+                return (term.compareTo(row.get(term.get_strColumnName())) < 0);
             case ">=":
-                return (term.compareTo(row.get(term.getColumnName())) <= 0);
+                return (term.compareTo(row.get(term.get_strColumnName())) <= 0);
             case "<":
-                return (term.compareTo(row.get(term.getColumnName())) > 0);
+                return (term.compareTo(row.get(term.get_strColumnName())) > 0);
             case "<=":
-                return (term.compareTo(row.get(term.getColumnName())) >= 0);
+                return (term.compareTo(row.get(term.get_strColumnName())) >= 0);
             default:
                 return false;
         }
@@ -882,9 +889,9 @@ public class DBApp implements DBAppInterface {
     }
 
     private void validateTerms(SQLTerm[] sqlTerms) throws IOException, DBAppException, ClassNotFoundException {
-        String targetTableName = sqlTerms[0].getTableName();
+        String targetTableName = sqlTerms[0].get_strTableName();
         for (SQLTerm term : sqlTerms) {
-            if (!term.getTableName().equals(targetTableName)) {
+            if (!term.get_strTableName().equals(targetTableName)) {
                 throw new DBAppException("The table name in all terms must be the same.");
             }
         }
@@ -895,13 +902,13 @@ public class DBApp implements DBAppInterface {
         Hashtable<String, String> colDataTypes = new Hashtable<>();
         while ((curLine = br.readLine()) != null) {
             String[] res = curLine.split(",");
-            if (res[0].equals(sqlTerms[0].getTableName())) {
+            if (res[0].equals(sqlTerms[0].get_strTableName())) {
                 colDataTypes.put(res[1], res[2]);
             }
         }
         for (SQLTerm term : sqlTerms) {
-            String columnName = term.getColumnName();
-            Object columnValue = term.getValue();
+            String columnName = term.get_strColumnName();
+            Object columnValue = term.get_objValue();
             if (!colDataTypes.containsKey(columnName)) {
                 throw new DBAppException("Column does not exist");
             }
@@ -1025,7 +1032,7 @@ public class DBApp implements DBAppInterface {
      * @throws ParseException
      */
 
-    private Object[] getTableInfo(String tableName) throws IOException, ParseException {
+    protected Object[] getTableInfo(String tableName) throws IOException, ParseException {
         FileReader metadata = new FileReader("src/main/resources/metadata.csv");
         BufferedReader br = new BufferedReader(metadata);
         String curLine;
@@ -1064,7 +1071,21 @@ public class DBApp implements DBAppInterface {
         return new Object[]{colDataTypes, colMin, colMax, clusteringType, clusteringCol};
     }
 
+    public Iterator parseSQL( StringBuffer strbufSQL ) throws DBAppException{
+
+        SQLiteLexer lexer = new SQLiteLexer(CharStreams.fromString(strbufSQL.toString()));
+        MiniSQLParser parser = new MiniSQLParser(new CommonTokenStream(lexer));
+        ParserErrorHandler errorHandler = new ParserErrorHandler();
+        parser.setErrorHandler(errorHandler);
+        ParseTree tree = parser.start();
+        ParseTreeWalker walker = new ParseTreeWalker();
+        ParserListener listener = new ParserListener(this);
+        walker.walk(listener, tree);
+
+        return listener.getIterator();
+    }
+
     public static void main(String[] args) throws DBAppException, IOException, ClassNotFoundException, ParseException {
-        
+
     }
 }

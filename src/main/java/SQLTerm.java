@@ -3,61 +3,41 @@ import java.util.Date;
 public class SQLTerm implements Comparable<Object> {
 
 
-    private String tableName;
-    private String columnName;
-    private String operator;
-    private Object value;
+    public String _strTableName;
+    public String _strColumnName;
+    public String _strOperator;
+    public Object _objValue;
 
-    public SQLTerm(String tableName, String columnName, String operator, Object value) {
-        this.tableName = tableName;
-        this.columnName = columnName;
-        this.operator = operator;
-        this.value = value;
+    public SQLTerm(){
+
     }
 
-    public String getTableName() {
-        return tableName;
+    public String get_strTableName() {
+        return _strTableName;
     }
 
-    public void setTableName(String tableName) {
-        this.tableName = tableName;
+    public String get_strColumnName() {
+        return _strColumnName;
     }
 
-    public String getColumnName() {
-        return columnName;
+    public String get_strOperator() {
+        return _strOperator;
     }
 
-    public void setColumnName(String columnName) {
-        this.columnName = columnName;
-    }
-
-    public String getOperator() {
-        return operator;
-    }
-
-    public void setOperator(String operator) {
-        this.operator = operator;
-    }
-
-
-    public Object getValue() {
-        return value;
-    }
-
-    public void setValue(Object value) {
-        this.value = value;
+    public Object get_objValue() {
+        return _objValue;
     }
 
     @Override
     public int compareTo(Object o) {
-        if (this.getValue() instanceof java.util.Date)
-            return ((Date) this.getValue()).compareTo((Date) o);
-        else if (this.getValue() instanceof java.lang.Integer)
-            return ((Integer) this.getValue()).compareTo((Integer) o);
-        else if (this.getValue() instanceof java.lang.Double)
-            return ((Double) this.getValue()).compareTo((Double) o);
-        else if (this.getValue() instanceof java.lang.String)
-            return ((String) this.getValue()).compareTo((String) o);
+        if (this.get_objValue() instanceof java.util.Date)
+            return ((Date) this.get_objValue()).compareTo((Date) o);
+        else if (this.get_objValue() instanceof java.lang.Integer)
+            return ((Integer) this.get_objValue()).compareTo((Integer) o);
+        else if (this.get_objValue() instanceof java.lang.Double)
+            return ((Double) this.get_objValue()).compareTo((Double) o);
+        else if (this.get_objValue() instanceof java.lang.String)
+            return ((String) this.get_objValue()).compareTo((String) o);
         return 0;
 
     }
