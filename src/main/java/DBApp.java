@@ -1,3 +1,5 @@
+import org.antlr.v4.runtime.misc.Pair;
+
 import java.io.*;
 import java.lang.reflect.Array;
 import java.text.ParseException;
@@ -7,6 +9,31 @@ import java.text.DateFormat;
 
 
 public class DBApp implements DBAppInterface {
+
+    static class Pair {
+        Index index;
+        Vector<SQLTerm> terms;
+
+        public Pair(Index index, Vector<SQLTerm> terms) {
+            this.index = index;
+            this.terms = terms;
+        }
+
+        public Index getIndex() {
+            return index;
+        }
+
+        public Vector<SQLTerm> getTerms() {
+            return terms;
+        }
+
+        public void add(SQLTerm term){
+            terms.add(term);
+        }
+    }
+
+
+
     @Override
     public void init() {
         File tablesDirectory = new File("src/main/resources/data/Tables");
@@ -728,6 +755,11 @@ public class DBApp implements DBAppInterface {
 
         Vector<Page> tablePages = targetTable.getPages();
         Stack<Vector<Hashtable<String, Object>>> termsSets = new Stack<>();
+
+        Vector<Pair> indicesWithTerms = isIndexPreferable(sqlTerms,arrayOperators,targetTable);
+        if (indicesWithTerms != null || indicesWithTerms.size() > 1){
+
+        }
         for (int i = sqlTerms.length - 1; i >= 0; i--) {
             Vector<Hashtable<String, Object>> vector = isValidTerm(sqlTerms[i], tablePages, clusteringColumnName);
             termsSets.add(vector);
@@ -758,6 +790,38 @@ public class DBApp implements DBAppInterface {
         Vector<Hashtable<String, Object>> queryResult;
         queryResult = termsSets.pop();
         return queryResult.iterator();
+    }
+
+    private Vector<Pair> isIndexPreferable(SQLTerm[] sqlTerms, String[] arrayOperators, Table targetTable) {
+        for (String operator:arrayOperators)
+            if (!operator.equals("AND"))
+                return null;
+        Vector<String> termsColumnNames = new Vector<>();
+        boolean[] termsVisited = new boolean[sqlTerms.length];
+        for (SQLTerm term:sqlTerms)
+            termsColumnNames.add(term.get_strColumnName());
+        Vector<Index> tableIndices = targetTable.getIndices();
+
+        Vector<Pair> indicesOfTerms = new Vector<>();
+        for (Index index:tableIndices){
+            Vector<SQLTerm> validTerms = new Vector<>();
+            for (String dimensionName:index.getColumnNames()){
+                if (termsColumnNames.contains(dimensionName)){
+                    validTerms.add(sqlTerms[termsColumnNames.indexOf(dimensionName)]);
+                    termsVisited[termsColumnNames.indexOf(dimensionName)] = true;
+                    continue;
+                }
+                Pair p = new Pair(index,validTerms);
+                indicesOfTerms.add(p);
+                break;
+            }
+        }
+        Pair nonIndexedTerms = new Pair(null,new Vector<>());
+        for (int i=0;i<termsVisited.length;i++)
+            if (!termsVisited[i])
+                nonIndexedTerms.add(sqlTerms[i]);
+        indicesOfTerms.add(nonIndexedTerms);
+       return  indicesOfTerms;
     }
 
 
@@ -827,6 +891,8 @@ public class DBApp implements DBAppInterface {
 
     private Vector<Hashtable<String, Object>> searchOnClustering(SQLTerm term, Vector<Page> tablePages) throws IOException, ClassNotFoundException {
         Vector<Hashtable<String, Object>> result = new Vector<>();
+        if (tablePages.size() == 0)
+            return result;
         int lo = 0;
         int hi = tablePages.size() - 1;
         Page targetPage = tablePages.get(0);
