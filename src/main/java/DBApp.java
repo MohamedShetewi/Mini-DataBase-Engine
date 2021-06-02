@@ -27,11 +27,10 @@ public class DBApp implements DBAppInterface {
             return terms;
         }
 
-        public void add(SQLTerm term){
+        public void add(SQLTerm term) {
             terms.add(term);
         }
     }
-
 
 
     @Override
@@ -423,7 +422,12 @@ public class DBApp implements DBAppInterface {
     public Object searchInsideIndex(Index index, Hashtable<String, Object> colNameValue) throws IOException, ClassNotFoundException {
         Object grid = deserializeObject(index.getPath());
         int[] indices = new int[colNameValue.size()];
-        return null;
+        String[] columnNames = index.getColumnNames();
+        for (int i = 0; i < indices.length; i++)
+            indices[i] = index.getPosition(colNameValue.get(columnNames[i]), i);
+        for (int x : indices)
+            grid = ((Object[]) grid)[x];
+        return grid;
     }
 
     @Override
@@ -756,8 +760,8 @@ public class DBApp implements DBAppInterface {
         Vector<Page> tablePages = targetTable.getPages();
         Stack<Vector<Hashtable<String, Object>>> termsSets = new Stack<>();
 
-        Vector<Pair> indicesWithTerms = isIndexPreferable(sqlTerms,arrayOperators,targetTable);
-        if (indicesWithTerms != null || indicesWithTerms.size() > 1){
+        Vector<Pair> indicesWithTerms = isIndexPreferable(sqlTerms, arrayOperators, targetTable);
+        if (indicesWithTerms != null || indicesWithTerms.size() > 1) {
 
         }
         for (int i = sqlTerms.length - 1; i >= 0; i--) {
@@ -793,35 +797,35 @@ public class DBApp implements DBAppInterface {
     }
 
     private Vector<Pair> isIndexPreferable(SQLTerm[] sqlTerms, String[] arrayOperators, Table targetTable) {
-        for (String operator:arrayOperators)
+        for (String operator : arrayOperators)
             if (!operator.equals("AND"))
                 return null;
         Vector<String> termsColumnNames = new Vector<>();
         boolean[] termsVisited = new boolean[sqlTerms.length];
-        for (SQLTerm term:sqlTerms)
+        for (SQLTerm term : sqlTerms)
             termsColumnNames.add(term.get_strColumnName());
         Vector<Index> tableIndices = targetTable.getIndices();
 
         Vector<Pair> indicesOfTerms = new Vector<>();
-        for (Index index:tableIndices){
+        for (Index index : tableIndices) {
             Vector<SQLTerm> validTerms = new Vector<>();
-            for (String dimensionName:index.getColumnNames()){
-                if (termsColumnNames.contains(dimensionName)){
+            for (String dimensionName : index.getColumnNames()) {
+                if (termsColumnNames.contains(dimensionName)) {
                     validTerms.add(sqlTerms[termsColumnNames.indexOf(dimensionName)]);
                     termsVisited[termsColumnNames.indexOf(dimensionName)] = true;
                     continue;
                 }
-                Pair p = new Pair(index,validTerms);
+                Pair p = new Pair(index, validTerms);
                 indicesOfTerms.add(p);
                 break;
             }
         }
-        Pair nonIndexedTerms = new Pair(null,new Vector<>());
-        for (int i=0;i<termsVisited.length;i++)
+        Pair nonIndexedTerms = new Pair(null, new Vector<>());
+        for (int i = 0; i < termsVisited.length; i++)
             if (!termsVisited[i])
                 nonIndexedTerms.add(sqlTerms[i]);
         indicesOfTerms.add(nonIndexedTerms);
-       return  indicesOfTerms;
+        return indicesOfTerms;
     }
 
 
