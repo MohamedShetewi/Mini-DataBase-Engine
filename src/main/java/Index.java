@@ -3,18 +3,23 @@ import java.util.Hashtable;
 import java.util.Vector;
 
 public class Index implements Serializable {
-
+    private int columnsCount;
     private String path;
     private String[] columnNames;
-    private Range[] columnRanges;
+    private Range[][] columnRanges;
 
     public Index(String path, String[] columnNames, Hashtable<String, Object> minValPerCol, Hashtable<String, Object> maxValPerCol) {
-
+        this.columnsCount = columnNames.length;
         this.path = path;
         this.columnNames = columnNames;
+        columnRanges = new Range[columnsCount][10];
+        for (int i = 0; i < columnsCount; i++)
+            columnRanges[i] = buildRanges(minValPerCol.get(columnNames[i]), maxValPerCol.get(columnNames[i]));
+    }
 
-        for (int i = 0; i < columnNames.length; i++)
-            columnRanges[i] = new Range(minValPerCol.get(columnNames[i]), maxValPerCol.get(columnNames[i]));
+    private Range[] buildRanges(Object minVal, Object maxVal) {
+
+        return null;
     }
 
     public void setPath(String path) {

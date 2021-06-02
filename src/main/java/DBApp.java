@@ -276,10 +276,9 @@ public class DBApp implements DBAppInterface {
     }
 
     private Object deserializeObject(String path) throws IOException, ClassNotFoundException {
-        Object o = null;
         FileInputStream fileIn = new FileInputStream(path);
         ObjectInputStream objectIn = new ObjectInputStream(fileIn);
-        o = objectIn.readObject();
+        Object o = objectIn.readObject();
         objectIn.close();
         fileIn.close();
         return o;
@@ -392,6 +391,12 @@ public class DBApp implements DBAppInterface {
         arr[0] = Integer.parseInt(prop.getProperty("MaximumRowsCountinPage"));
         arr[1] = Integer.parseInt(prop.getProperty("MaximumKeysCountinIndexBucket"));
         return arr;
+    }
+
+    public Object searchInsideIndex(Index index, Hashtable<String, Object> colNameValue) throws IOException, ClassNotFoundException {
+        Object grid = deserializeObject(index.getPath());
+        int[] indices = new int[colNameValue.size()];
+        return null;
     }
 
     @Override
@@ -1112,6 +1117,7 @@ public class DBApp implements DBAppInterface {
         }
         return new Object[]{colDataTypes, colMin, colMax, clusteringType, clusteringCol};
     }
+
 
     public static void main(String[] args) throws DBAppException, IOException, ClassNotFoundException, ParseException {
 
