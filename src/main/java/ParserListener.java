@@ -100,7 +100,7 @@ public class ParserListener extends MiniSQLParserBaseListener {
                 }
             }
             dbApp.createTable(tableName, clusteringKey, colNameType, colMin, colMax);
-        } catch (DBAppException e) {
+        } catch (DBAppException | IOException e) {
             e.printStackTrace();
             System.exit(1);
         }
@@ -108,6 +108,24 @@ public class ParserListener extends MiniSQLParserBaseListener {
 
     @Override
     public void enterCreate_index_stmt(MiniSQLParser.Create_index_stmtContext ctx) {
+        String tableName = ctx.table_name().getText();
+        String[] indexColumns = new String[ctx.column_name().size()];
+
+        for (int i = 0; i < indexColumns.length; i++) {
+            indexColumns[i] = ctx.column_name().get(i).getText();
+        }
+
+        try {
+            dbApp.createIndex(tableName, indexColumns);
+        } catch (DBAppException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (ParseException e) {
+            e.printStackTrace();
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        }
 
     }
 
@@ -140,7 +158,7 @@ public class ParserListener extends MiniSQLParserBaseListener {
             Object[] info = dbApp.getTableInfo(tableName);
             Hashtable<String, String> colNameType = (Hashtable<String, String>) info[0];
             String clusteringCol = (String) info[4];
-            if(!ctx.update_cond().column_name().getText().equals(clusteringCol)){
+            if (!ctx.update_cond().column_name().getText().equals(clusteringCol)) {
                 throw new DBAppException("Update condition must be on clustering key");
             }
             for (int i = 0; i < ctx.column_name().size(); i++) {
@@ -150,7 +168,7 @@ public class ParserListener extends MiniSQLParserBaseListener {
             }
             StringTokenizer st = new StringTokenizer(ctx.update_cond().literals().getText(), "'\"");
             String clusteringValue = st.nextToken();
-            dbApp.updateTable(tableName,clusteringValue, colNameValue);
+            dbApp.updateTable(tableName, clusteringValue, colNameValue);
         } catch (IOException | ParseException | DBAppException | ClassNotFoundException e) {
             e.printStackTrace();
             System.exit(1);
