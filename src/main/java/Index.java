@@ -6,6 +6,9 @@ public class Index implements Serializable {
 
     private String path;
     private String[] columnNames;
+
+
+
     private Range[] columnRanges;
 
     public Index(String path, String[] columnNames, Hashtable<String, Object> minValPerCol, Hashtable<String, Object> maxValPerCol) {
@@ -25,6 +28,13 @@ public class Index implements Serializable {
         return path;
     }
 
+    public String[] getColumnNames() {
+        return columnNames;
+    }
+
+    public Range[] getColumnRanges() {
+        return columnRanges;
+    }
     static class Range implements Serializable {
         Object minVal, maxVal;
 
