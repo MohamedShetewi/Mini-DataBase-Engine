@@ -1,4 +1,3 @@
-import javax.swing.*;
 import java.io.*;
 import java.lang.reflect.Array;
 import java.text.ParseException;
@@ -418,7 +417,6 @@ public class DBApp implements DBAppInterface {
         Object gridIndex = Array.newInstance(Vector.class, dimensions);
 
 
-    }
 
 
     private void updateMetaDataFile(String tableName, String[] indexColumns) throws IOException {
@@ -714,7 +712,7 @@ public class DBApp implements DBAppInterface {
         if (sqlTerms.length - 1 != arrayOperators.length)
             throw new DBAppException("Number of terms and operators does not match.");
 
-        String targetTableName = sqlTerms[0].getTableName();
+        String targetTableName = sqlTerms[0].get_strTableName();
         validateArrayOperators(arrayOperators);
         String clusteringColumnName = validateExistingTable(targetTableName);
         validateTerms(sqlTerms);
@@ -1115,7 +1113,6 @@ public class DBApp implements DBAppInterface {
     }
 
     public static void main(String[] args) throws DBAppException, IOException, ClassNotFoundException, ParseException {
-        DBApp d = new DBApp();
-        d.createIndex("students", new String[]{"gpa", "first_name"});
+
     }
 }
