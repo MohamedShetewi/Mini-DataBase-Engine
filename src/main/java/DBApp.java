@@ -1,3 +1,8 @@
+import org.antlr.v4.runtime.CharStreams;
+import org.antlr.v4.runtime.CommonTokenStream;
+import org.antlr.v4.runtime.tree.ParseTree;
+import org.antlr.v4.runtime.tree.ParseTreeWalker;
+
 import java.io.*;
 import java.lang.reflect.Array;
 import java.text.ParseException;
@@ -824,6 +829,7 @@ public class DBApp implements DBAppInterface {
         Vector<Hashtable<String, Object>> result = new Vector<>();
         int lo = 0;
         int hi = tablePages.size() - 1;
+        //To be edited:
         Page targetPage = tablePages.get(0);
         while (lo <= hi) {
             int mid = (lo + hi) / 2;
@@ -1111,6 +1117,20 @@ public class DBApp implements DBAppInterface {
             }
         }
         return new Object[]{colDataTypes, colMin, colMax, clusteringType, clusteringCol};
+    }
+
+    public Iterator parseSQL( StringBuffer strbufSQL ) throws DBAppException{
+
+        SQLiteLexer lexer = new SQLiteLexer(CharStreams.fromString(strbufSQL.toString()));
+        MiniSQLParser parser = new MiniSQLParser(new CommonTokenStream(lexer));
+        ParserErrorHandler errorHandler = new ParserErrorHandler();
+        parser.setErrorHandler(errorHandler);
+        ParseTree tree = parser.start();
+        ParseTreeWalker walker = new ParseTreeWalker();
+        ParserListener listener = new ParserListener(this);
+        walker.walk(listener, tree);
+
+        return listener.getIterator();
     }
 
     public static void main(String[] args) throws DBAppException, IOException, ClassNotFoundException, ParseException {

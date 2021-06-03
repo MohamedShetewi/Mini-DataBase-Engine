@@ -117,14 +117,9 @@ public class ParserListener extends MiniSQLParserBaseListener {
 
         try {
             dbApp.createIndex(tableName, indexColumns);
-        } catch (DBAppException e) {
+        } catch (DBAppException | IOException | ParseException | ClassNotFoundException e) {
             e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
-        } catch (ParseException e) {
-            e.printStackTrace();
-        } catch (ClassNotFoundException e) {
-            e.printStackTrace();
+            System.exit(1);
         }
 
     }
@@ -221,7 +216,8 @@ public class ParserListener extends MiniSQLParserBaseListener {
                 break;
             case "java.util.Date":
                 try {
-                    returnObject = new SimpleDateFormat("yyyy-MM-dd").parse(value);
+                    StringTokenizer st = new StringTokenizer(value, "'\"");
+                    returnObject = new SimpleDateFormat("yyyy-MM-dd").parse(st.nextToken());
                 } catch (ParseException e) {
                     throw new DBAppException("Incompatible clustering key data type");
                 }
