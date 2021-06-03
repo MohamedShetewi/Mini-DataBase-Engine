@@ -98,6 +98,7 @@ public class DBApp implements DBAppInterface {
 
     @Override
     public void insertIntoTable(String tableName, Hashtable<String, Object> colNameValue) throws DBAppException {
+        String pagePathForIndex;
         //Check the table exists and the input record is valid.
         String primaryKey = validateRecord(tableName, colNameValue);
         try {
@@ -107,7 +108,8 @@ public class DBApp implements DBAppInterface {
             int idxOfPage = searchForPage(pages, colNameValue.get(primaryKey));
             if (pages.size() == 0) {
                 //empty table
-                createAndSerializePage(t, colNameValue, primaryKey, 0);
+                pagePathForIndex = createAndSerializePage(t, colNameValue, primaryKey, 0);
+                updateIndex(t, colNameValue, primaryKey, pagePathForIndex);
                 delete("src/main/resources/data/Tables/" + tableName + ".ser");
                 serializeObject(t, "src/main/resources/data/Tables/" + tableName + ".ser");
                 return;
@@ -127,12 +129,15 @@ public class DBApp implements DBAppInterface {
                         Page followingPage = pages.get(idxOfPage + 1);
                         if (followingPage.getNumOfRecords() == maxCountInPage) {
                             //following page is also full. Create new page in between and shift.
-                            createNewPageAndShift(t, colNameValue, pageRecords, primaryKey, idxOfPage);
+                            pagePathForIndex = createNewPageAndShift(t, colNameValue, pageRecords, primaryKey, idxOfPage);
+                            updateIndexByPage(t, pages.get(idxOfPage+1), primaryKey);
+
                         } else {
                             //following page is not full.
                             //shift last record in the current page to the following page
                             //and insert the record in place in the current page.
-                            insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
+                            pagePathForIndex = insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
+                            updateIndex(t,colNameValue,primaryKey,pagePathForIndex);
 
                             Hashtable<String, Object> lastRecord = pageRecords.remove(pageRecords.size() - 1);
                             Vector<Hashtable<String, Object>> followingPageRecords = (Vector<Hashtable<String, Object>>) deserializeObject(followingPage.getPath());
@@ -146,14 +151,19 @@ public class DBApp implements DBAppInterface {
 
                             delete(followingPage.getPath());
                             serializeObject(followingPageRecords, followingPage.getPath());
+
+                            updateIndex(t,lastRecord,primaryKey,followingPage.getPath());
                         }
                     } else {
                         //current page was the last page in the table.
                         //need to create new page and shift some records
-                        createNewPageAndShift(t, colNameValue, pageRecords, primaryKey, idxOfPage);
+                        pagePathForIndex = createNewPageAndShift(t, colNameValue, pageRecords, primaryKey, idxOfPage);
+                        updateIndexByPage(t, pages.get(idxOfPage+1), primaryKey);
+
                     }
                 } else {
-                    insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
+                    pagePathForIndex = insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
+                    updateIndex(t,colNameValue,primaryKey,pagePathForIndex);
                 }
             } else {
                 //The key doesn't belong to a range in any page.
@@ -165,9 +175,11 @@ public class DBApp implements DBAppInterface {
                     if (curPage.getNumOfRecords() < maxCountInPage) {
                         Vector<Hashtable<String, Object>> pageRecords = (Vector<Hashtable<String, Object>>) deserializeObject(curPage.getPath());
                         int idxOfRecord = searchInsidePage(pageRecords, colNameValue.get(primaryKey), primaryKey);
-                        insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
+                       pagePathForIndex =  insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
+                       updateIndex(t,colNameValue,primaryKey,pagePathForIndex);
                     } else {
-                        createAndSerializePage(t, colNameValue, primaryKey, 0);
+                       pagePathForIndex = createAndSerializePage(t, colNameValue, primaryKey, 0);
+                       updateIndex(t,colNameValue,primaryKey,pagePathForIndex);
                     }
                 } else if (idxOfPage == pages.size()) {
                     //check for place in last page else create new page
@@ -175,9 +187,12 @@ public class DBApp implements DBAppInterface {
                     if (curPage.getNumOfRecords() < maxCountInPage) {
                         Vector<Hashtable<String, Object>> pageRecords = (Vector<Hashtable<String, Object>>) deserializeObject(curPage.getPath());
                         int idxOfRecord = searchInsidePage(pageRecords, colNameValue.get(primaryKey), primaryKey);
-                        insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
+                        pagePathForIndex = insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
+                        updateIndex(t,colNameValue,primaryKey,pagePathForIndex);
                     } else {
-                        createAndSerializePage(t, colNameValue, primaryKey, pages.size());
+                        pagePathForIndex = createAndSerializePage(t, colNameValue, primaryKey, pages.size());
+                        updateIndex(t,colNameValue,primaryKey,pagePathForIndex);
+
                     }
                 } else {
                     //check for the current page then the following else create a new page
@@ -185,27 +200,107 @@ public class DBApp implements DBAppInterface {
                     if (curPage.getNumOfRecords() < maxCountInPage) {
                         Vector<Hashtable<String, Object>> pageRecords = (Vector<Hashtable<String, Object>>) deserializeObject(curPage.getPath());
                         int idxOfRecord = searchInsidePage(pageRecords, colNameValue.get(primaryKey), primaryKey);
-                        insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
+                       pagePathForIndex = insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
+                       updateIndex(t,colNameValue,primaryKey,pagePathForIndex);
                     } else {
                         curPage = pages.get(idxOfPage); //this now is following page
                         if (curPage.getNumOfRecords() < maxCountInPage) {
                             Vector<Hashtable<String, Object>> pageRecords = (Vector<Hashtable<String, Object>>) deserializeObject(curPage.getPath());
                             int idxOfRecord = searchInsidePage(pageRecords, colNameValue.get(primaryKey), primaryKey);
-                            insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
+                            pagePathForIndex = insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
+                            updateIndex(t,colNameValue,primaryKey,pagePathForIndex);
                         } else {
-                            createAndSerializePage(t, colNameValue, primaryKey, idxOfPage);
+                            pagePathForIndex = createAndSerializePage(t, colNameValue, primaryKey, idxOfPage);
+                            updateIndex(t,colNameValue,primaryKey,pagePathForIndex);
                         }
                     }
                 }
             }
             delete("src/main/resources/data/Tables/" + tableName + ".ser");
             serializeObject(t, "src/main/resources/data/Tables/" + tableName + ".ser");
+
         } catch (Exception e) {
             e.printStackTrace();
         }
+
+
     }
 
-    private void createAndSerializePage(Table table, Hashtable<String, Object> colNameValue, String primaryKey, int index) throws IOException {
+    private Vector<Bucket> search(Hashtable<String, Object> keyHashTable, Object[] indexArr) {
+        return new Vector<>();
+    }
+
+    private void updateIndex(Table table, Hashtable<String, Object> colNameValue, String primaryKey, String pagePath) throws IOException, ClassNotFoundException {
+        Vector<Index> indices = table.getIndices();
+        for (Index index : indices) {
+
+            String[] colNames = index.getColumnNames();
+            Hashtable<String, Object> keyHashTable = new Hashtable<>();
+            //keyHashTable is the key to use to search inside the bucket
+            for (String colName : colNames) {
+                if (colNameValue.containsKey(colName))
+                    keyHashTable.put(colName, colNameValue.get(colName));
+            }
+
+            Object[] indexArr = (Object[]) deserializeObject(index.getPath());
+            //Now we search for the bucket inside the index
+            Vector<Bucket> bucketVector = search(keyHashTable, indexArr);
+
+            boolean foundBucket = false;
+            Bucket bucket = new Bucket("path");
+
+            for (Bucket b : bucketVector) {
+                if (b.getNumOfRecords() < readConfig()[1]) {
+                    foundBucket = true;
+                    bucket = b;
+                    break;
+                }
+            }
+
+            Hashtable<Hashtable<String, Object>, Vector<RowReference>> bucketHashTable ;
+            Vector<RowReference> newVector;
+            if (foundBucket) {
+                bucketHashTable = (Hashtable<Hashtable<String, Object>, Vector<RowReference>>) deserializeObject(bucket.getPath());
+
+                //We can add this record to this bucket
+                if (bucketHashTable.containsKey(keyHashTable)) {
+                    newVector = bucketHashTable.get(keyHashTable);
+                } else {
+                    //The values of the record was never in the index before
+                    newVector = new Vector<>();
+                }
+            } else {
+                bucketVector.add(bucket);
+                bucketHashTable = new Hashtable<>();
+                newVector = new Vector<>();
+            }
+
+            newVector.add(new RowReference(pagePath, colNameValue.get(primaryKey)));
+            bucketHashTable.put(keyHashTable, newVector);
+            bucket.setNumOfRecords(bucket.getNumOfRecords() + 1);
+
+
+
+            //Delete then serialize the the index and the bucket again
+            delete(bucket.getPath());
+            serializeObject(bucketHashTable, bucket.getPath());
+
+            delete("Path of the vector of buckets");
+            serializeObject(bucketVector, "Path of the vector of buckets");
+
+            delete(index.getPath());
+            serializeObject(indexArr, index.getPath());
+        }
+
+    }
+
+    private void updateIndexByPage(Table table, Page page, String primaryKey) throws IOException, ClassNotFoundException {
+        Vector<Hashtable<String, Object>> pageRecords = (Vector<Hashtable<String, Object>>) deserializeObject(page.getPath());
+        for (Hashtable<String, Object> record : pageRecords)
+            updateIndex(table, record, primaryKey, page.getPath());
+    }
+
+    private String createAndSerializePage(Table table, Hashtable<String, Object> colNameValue, String primaryKey, int index) throws IOException {
 
         String pagePath = "src/main/resources/data/Tables/" + table.getTableName() + "/page" + table.getPagesCounter() + ".ser";
         table.setPagesCounter(table.getPagesCounter() + 1);
@@ -219,10 +314,11 @@ public class DBApp implements DBAppInterface {
 
         table.getPages().add(index, newPage);
         serializeObject(pageRecords, pagePath);
+        return pagePath;
 
     }
 
-    private void insertRecordInPlace(int idxOfRecord, Hashtable<String, Object> colNameValue, String primaryKey, Vector<Hashtable<String, Object>> pageRecords, Page curPage) throws IOException {
+    private String insertRecordInPlace(int idxOfRecord, Hashtable<String, Object> colNameValue, String primaryKey, Vector<Hashtable<String, Object>> pageRecords, Page curPage) throws IOException {
         idxOfRecord -= curPage.getNumOfRecords();
         pageRecords.add(idxOfRecord, colNameValue);
         curPage.setMinClusteringValue(pageRecords.get(0).get(primaryKey));
@@ -230,9 +326,10 @@ public class DBApp implements DBAppInterface {
         curPage.setNumOfRecords(pageRecords.size());
         delete(curPage.getPath());
         serializeObject(pageRecords, curPage.getPath());
+        return curPage.getPath();
     }
 
-    private void createNewPageAndShift(Table table, Hashtable<String, Object> colNameValue, Vector<Hashtable<String, Object>> pageRecords, String primaryKey, int idxOfPreviousPage) throws IOException {
+    private String createNewPageAndShift(Table table, Hashtable<String, Object> colNameValue, Vector<Hashtable<String, Object>> pageRecords, String primaryKey, int idxOfPreviousPage) throws IOException {
 
         String newPagePath = "src/main/resources/data/Tables/" + table.getTableName() + "/page" + table.getPagesCounter() + ".ser";
         table.setPagesCounter(table.getPagesCounter() + 1);
@@ -261,6 +358,8 @@ public class DBApp implements DBAppInterface {
 
         serializeObject(newPageRecords, newPagePath);
         table.getPages().add(idxOfPreviousPage + 1, newPage);
+
+        return newPagePath;
 
     }
 
@@ -397,22 +496,19 @@ public class DBApp implements DBAppInterface {
 
         String clusteringKey = validateExistingTable(tableName);
         Object[] tableInfo = getTableInfo(tableName);
-        Hashtable<String,String> columnsInfo = (Hashtable<String, String>) tableInfo[0];
+        Hashtable<String, String> columnsInfo = (Hashtable<String, String>) tableInfo[0];
 
         for (String colName : columnNames)
-            if(!columnsInfo.containsKey(colName))
+            if (!columnsInfo.containsKey(colName))
                 throw new DBAppException("No such column exits!");
 
-        int[]dimensions = new int[columnNames.length];
+        int[] dimensions = new int[columnNames.length];
         Arrays.fill(dimensions, 10);
 
         Object gridIndex = Array.newInstance(Vector.class, dimensions);
-        
 
 
     }
-
-
 
 
     @Override
@@ -757,7 +853,6 @@ public class DBApp implements DBAppInterface {
         if (term.getColumnName().equals(clusteringColumnName))
             return searchOnClustering(term, tablePages);
         return searchLinearly(term, tablePages);
-
     }
 
     private Vector<Hashtable<String, Object>> searchLinearly(SQLTerm term, Vector<Page> tablePages) throws IOException, ClassNotFoundException {
@@ -1067,4 +1162,14 @@ public class DBApp implements DBAppInterface {
     public static void main(String[] args) throws DBAppException, IOException, ClassNotFoundException, ParseException {
 
     }
+
+    // id | age | cc
+    // ---+-----+----
+    // 5  | 50  | 13
+    // ---+-----+----
+    // 10 | 14  | 30
+    //
+    //
+    //
+    //
 }
