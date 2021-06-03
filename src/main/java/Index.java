@@ -6,6 +6,15 @@ public class Index implements Serializable {
     private final String[] columnNames;
     private final Range[][] columnRanges;
     private final int columnsCount;
+    private int numOfBuckets;
+
+    public int getNumOfBuckets() {
+        return numOfBuckets;
+    }
+
+    public void setNumOfBuckets(int numOfBuckets) {
+        this.numOfBuckets = numOfBuckets;
+    }
 
     public Index(String path, String[] columnNames, Hashtable<String, Object> minValPerCol, Hashtable<String, Object> maxValPerCol) {
         this.columnsCount = columnNames.length;

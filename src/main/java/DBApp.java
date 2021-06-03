@@ -161,14 +161,14 @@ public class DBApp implements DBAppInterface {
                         if (followingPage.getNumOfRecords() == maxCountInPage) {
                             //following page is also full. Create new page in between and shift.
                             pagePathForIndex = createNewPageAndShift(t, colNameValue, pageRecords, primaryKey, idxOfPage);
-                            updateIndexByPage(t, pages.get(idxOfPage+1), primaryKey);
+                            updateIndexByPage(t, pages.get(idxOfPage + 1), primaryKey);
 
                         } else {
                             //following page is not full.
                             //shift last record in the current page to the following page
                             //and insert the record in place in the current page.
                             pagePathForIndex = insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
-                            updateIndex(t,colNameValue,primaryKey,pagePathForIndex);
+                            updateIndex(t, colNameValue, primaryKey, pagePathForIndex);
 
                             Hashtable<String, Object> lastRecord = pageRecords.remove(pageRecords.size() - 1);
                             Vector<Hashtable<String, Object>> followingPageRecords = (Vector<Hashtable<String, Object>>) deserializeObject(followingPage.getPath());
@@ -183,18 +183,18 @@ public class DBApp implements DBAppInterface {
                             delete(followingPage.getPath());
                             serializeObject(followingPageRecords, followingPage.getPath());
 
-                            updateIndex(t,lastRecord,primaryKey,followingPage.getPath());
+                            updateIndex(t, lastRecord, primaryKey, followingPage.getPath());
                         }
                     } else {
                         //current page was the last page in the table.
                         //need to create new page and shift some records
                         pagePathForIndex = createNewPageAndShift(t, colNameValue, pageRecords, primaryKey, idxOfPage);
-                        updateIndexByPage(t, pages.get(idxOfPage+1), primaryKey);
+                        updateIndexByPage(t, pages.get(idxOfPage + 1), primaryKey);
 
                     }
                 } else {
                     pagePathForIndex = insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
-                    updateIndex(t,colNameValue,primaryKey,pagePathForIndex);
+                    updateIndex(t, colNameValue, primaryKey, pagePathForIndex);
                 }
             } else {
                 //The key doesn't belong to a range in any page.
@@ -206,11 +206,11 @@ public class DBApp implements DBAppInterface {
                     if (curPage.getNumOfRecords() < maxCountInPage) {
                         Vector<Hashtable<String, Object>> pageRecords = (Vector<Hashtable<String, Object>>) deserializeObject(curPage.getPath());
                         int idxOfRecord = searchInsidePage(pageRecords, colNameValue.get(primaryKey), primaryKey);
-                       pagePathForIndex =  insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
-                       updateIndex(t,colNameValue,primaryKey,pagePathForIndex);
+                        pagePathForIndex = insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
+                        updateIndex(t, colNameValue, primaryKey, pagePathForIndex);
                     } else {
-                       pagePathForIndex = createAndSerializePage(t, colNameValue, primaryKey, 0);
-                       updateIndex(t,colNameValue,primaryKey,pagePathForIndex);
+                        pagePathForIndex = createAndSerializePage(t, colNameValue, primaryKey, 0);
+                        updateIndex(t, colNameValue, primaryKey, pagePathForIndex);
                     }
                 } else if (idxOfPage == pages.size()) {
                     //check for place in last page else create new page
@@ -219,10 +219,10 @@ public class DBApp implements DBAppInterface {
                         Vector<Hashtable<String, Object>> pageRecords = (Vector<Hashtable<String, Object>>) deserializeObject(curPage.getPath());
                         int idxOfRecord = searchInsidePage(pageRecords, colNameValue.get(primaryKey), primaryKey);
                         pagePathForIndex = insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
-                        updateIndex(t,colNameValue,primaryKey,pagePathForIndex);
+                        updateIndex(t, colNameValue, primaryKey, pagePathForIndex);
                     } else {
                         pagePathForIndex = createAndSerializePage(t, colNameValue, primaryKey, pages.size());
-                        updateIndex(t,colNameValue,primaryKey,pagePathForIndex);
+                        updateIndex(t, colNameValue, primaryKey, pagePathForIndex);
 
                     }
                 } else {
@@ -231,18 +231,18 @@ public class DBApp implements DBAppInterface {
                     if (curPage.getNumOfRecords() < maxCountInPage) {
                         Vector<Hashtable<String, Object>> pageRecords = (Vector<Hashtable<String, Object>>) deserializeObject(curPage.getPath());
                         int idxOfRecord = searchInsidePage(pageRecords, colNameValue.get(primaryKey), primaryKey);
-                       pagePathForIndex = insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
-                       updateIndex(t,colNameValue,primaryKey,pagePathForIndex);
+                        pagePathForIndex = insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
+                        updateIndex(t, colNameValue, primaryKey, pagePathForIndex);
                     } else {
                         curPage = pages.get(idxOfPage); //this now is following page
                         if (curPage.getNumOfRecords() < maxCountInPage) {
                             Vector<Hashtable<String, Object>> pageRecords = (Vector<Hashtable<String, Object>>) deserializeObject(curPage.getPath());
                             int idxOfRecord = searchInsidePage(pageRecords, colNameValue.get(primaryKey), primaryKey);
                             pagePathForIndex = insertRecordInPlace(idxOfRecord, colNameValue, primaryKey, pageRecords, curPage);
-                            updateIndex(t,colNameValue,primaryKey,pagePathForIndex);
+                            updateIndex(t, colNameValue, primaryKey, pagePathForIndex);
                         } else {
                             pagePathForIndex = createAndSerializePage(t, colNameValue, primaryKey, idxOfPage);
-                            updateIndex(t,colNameValue,primaryKey,pagePathForIndex);
+                            updateIndex(t, colNameValue, primaryKey, pagePathForIndex);
                         }
                     }
                 }
@@ -264,18 +264,25 @@ public class DBApp implements DBAppInterface {
 
             String[] colNames = index.getColumnNames();
             Hashtable<String, Object> keyHashTable = new Hashtable<>();
+            Hashtable<String, Range> keySearchHashTable = new Hashtable<>();
             //keyHashTable is the key to use to search inside the bucket
             for (String colName : colNames) {
-                if (colNameValue.containsKey(colName))
+                if (colNameValue.containsKey(colName)) {
                     keyHashTable.put(colName, colNameValue.get(colName));
+                    Comparable object = (Comparable) colNameValue.get(colName);
+                    keySearchHashTable.put(colName, new Range(object, object));
+                }
+
             }
 
             Object[] indexArr = (Object[]) deserializeObject(index.getPath());
             //Now we search for the bucket inside the index
-            Vector<Bucket> bucketVector = search(keyHashTable, indexArr);
+            Vector<Bucket> bucketVector = searchInsideIndex(index,keySearchHashTable);
 
             boolean foundBucket = false;
-            Bucket bucket = new Bucket("path");
+            String indexPath = index.getPath();
+            Bucket bucket = new Bucket(indexPath.substring(0,indexPath.length()-4)+"bucket"+index.getNumOfBuckets()+".ser");
+            index.setNumOfBuckets(index.getNumOfBuckets()+1);
 
             for (Bucket b : bucketVector) {
                 if (b.getNumOfRecords() < readConfig()[1]) {
@@ -284,8 +291,7 @@ public class DBApp implements DBAppInterface {
                     break;
                 }
             }
-
-            Hashtable<Hashtable<String, Object>, Vector<RowReference>> bucketHashTable ;
+            Hashtable<Hashtable<String, Object>, Vector<RowReference>> bucketHashTable;
             Vector<RowReference> newVector;
             if (foundBucket) {
                 bucketHashTable = (Hashtable<Hashtable<String, Object>, Vector<RowReference>>) deserializeObject(bucket.getPath());
@@ -308,14 +314,10 @@ public class DBApp implements DBAppInterface {
             bucket.setNumOfRecords(bucket.getNumOfRecords() + 1);
 
 
-
             //Delete then serialize the the index and the bucket again
             delete(bucket.getPath());
             serializeObject(bucketHashTable, bucket.getPath());
-
-            delete("Path of the vector of buckets");
-            serializeObject(bucketVector, "Path of the vector of buckets");
-
+            
             delete(index.getPath());
             serializeObject(indexArr, index.getPath());
         }
@@ -871,28 +873,27 @@ public class DBApp implements DBAppInterface {
         Stack<Vector<Hashtable<String, Object>>> termsSets = new Stack<>();
 
         Vector<Pair> indicesWithTerms = isIndexPreferable(sqlTerms, arrayOperators, targetTable);
-        HashMap<String,Vector<SQLTerm>> hashMapOfTerms = hashingTerms(sqlTerms);
+        HashMap<String, Vector<SQLTerm>> hashMapOfTerms = hashingTerms(sqlTerms);
 
         if (indicesWithTerms != null || indicesWithTerms.size() > 1) {
-            for (Pair pair:indicesWithTerms){
+            for (Pair pair : indicesWithTerms) {
                 Index index = pair.getIndex();
                 Vector<SQLTerm> indexTerms = pair.getTerms();
-                if (index != null){
-                    Hashtable<String,Range> termsRanges = new Hashtable<>();
-                    for(SQLTerm indexTerm:indexTerms){
+                if (index != null) {
+                    Hashtable<String, Range> termsRanges = new Hashtable<>();
+                    for (SQLTerm indexTerm : indexTerms) {
                         Vector<SQLTerm> terms = hashMapOfTerms.get(indexTerm.get_strColumnName());
-                        Range range = new Range((Comparable) ((Hashtable<String,Object>)tableInfo[1]).get(indexTerm.get_strColumnName()),(Comparable) ((Hashtable<String,Object>)tableInfo[2]).get(indexTerm.get_strColumnName()));
-                        for (SQLTerm term:terms) {
+                        Range range = new Range((Comparable) ((Hashtable<String, Object>) tableInfo[1]).get(indexTerm.get_strColumnName()), (Comparable) ((Hashtable<String, Object>) tableInfo[2]).get(indexTerm.get_strColumnName()));
+                        for (SQLTerm term : terms) {
                             range = updateColumnRange(term, tableInfo, range);
                             if (range == null)
                                 return new Vector<>().iterator();
                         }
-                        termsRanges.put(indexTerm.get_strColumnName(),range);
+                        termsRanges.put(indexTerm.get_strColumnName(), range);
                     }
-                    Vector<Bucket> buckets = searchInsideIndex(index,termsRanges);
-                }
-                else {
-                    for (SQLTerm term:pair.getTerms()){
+                    Vector<Bucket> buckets = searchInsideIndex(index, termsRanges);
+                } else {
+                    for (SQLTerm term : pair.getTerms()) {
                         Vector<Hashtable<String, Object>> vector = isValidTerm(term, tablePages, clusteringColumnName);
                         termsSets.add(vector);
                     }
@@ -935,9 +936,9 @@ public class DBApp implements DBAppInterface {
 
     private HashMap<String, Vector<SQLTerm>> hashingTerms(SQLTerm[] sqlTerms) {
         HashMap<String, Vector<SQLTerm>> hashMap = new HashMap<>();
-        for (SQLTerm term:sqlTerms)
+        for (SQLTerm term : sqlTerms)
             hashMap.put(term.get_strColumnName(), new Vector<>());
-        for (SQLTerm term:sqlTerms)
+        for (SQLTerm term : sqlTerms)
             hashMap.get(term.get_strColumnName()).add(term);
         return hashMap;
     }
@@ -946,13 +947,13 @@ public class DBApp implements DBAppInterface {
         Range newRange = null;
         switch (term.get_strOperator()) {
             case "=":
-                newRange = ((Comparable) term.get_objValue()).compareTo(range.getMinVal()) >=0 && ((Comparable) term.get_objValue()).compareTo(range.getMaxVal()) <=0? new Range((Comparable) term.get_objValue(),(Comparable) term.get_objValue()):null;
+                newRange = ((Comparable) term.get_objValue()).compareTo(range.getMinVal()) >= 0 && ((Comparable) term.get_objValue()).compareTo(range.getMaxVal()) <= 0 ? new Range((Comparable) term.get_objValue(), (Comparable) term.get_objValue()) : null;
             case ">":
             case ">=":
-                newRange =  new Range(((Comparable) term.get_objValue()).compareTo(range.getMinVal())>0?(Comparable) term.get_objValue():range.getMinVal(),range.getMaxVal());
+                newRange = new Range(((Comparable) term.get_objValue()).compareTo(range.getMinVal()) > 0 ? (Comparable) term.get_objValue() : range.getMinVal(), range.getMaxVal());
             case "<":
             case "<=":
-                newRange = new Range(range.getMinVal(), ((Comparable) term.get_objValue()).compareTo(range.getMaxVal())<0?(Comparable) term.get_objValue():range.getMaxVal());
+                newRange = new Range(range.getMinVal(), ((Comparable) term.get_objValue()).compareTo(range.getMaxVal()) < 0 ? (Comparable) term.get_objValue() : range.getMaxVal());
         }
         if (newRange != null && newRange.getMaxVal().compareTo(newRange.getMinVal()) < 0)
             newRange = null;
