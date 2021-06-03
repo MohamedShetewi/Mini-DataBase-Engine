@@ -253,11 +253,7 @@ public class DBApp implements DBAppInterface {
             e.printStackTrace();
         }
     }
-
-    private Vector<Bucket> search(Hashtable<String, Object> keyHashTable, Object[] indexArr) {
-        return new Vector<>();
-    }
-
+    
     private void updateIndex(Table table, Hashtable<String, Object> colNameValue, String primaryKey, String pagePath) throws IOException, ClassNotFoundException {
         Vector<Index> indices = table.getIndices();
         for (Index index : indices) {
@@ -317,7 +313,7 @@ public class DBApp implements DBAppInterface {
             //Delete then serialize the the index and the bucket again
             delete(bucket.getPath());
             serializeObject(bucketHashTable, bucket.getPath());
-            
+
             delete(index.getPath());
             serializeObject(indexArr, index.getPath());
         }
