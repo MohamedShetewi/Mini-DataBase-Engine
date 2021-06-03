@@ -5,8 +5,11 @@ public class Table implements Serializable {
 
     private String tableName;
     private Vector<Page> pages;
-    private int pagesCounter;
     private Vector<Index> indices;
+    private int pagesCounter;
+    private int indexCounter;
+
+
 
 
     public Table(String tableName) {
@@ -14,6 +17,14 @@ public class Table implements Serializable {
         this.pages = new Vector<>();
         this.indices = new Vector<>();
 
+    }
+
+    public int getIndexCounter() {
+        return indexCounter;
+    }
+
+    public void setIndexCounter(int indexCounter) {
+        this.indexCounter = indexCounter;
     }
 
     public Vector<Index> getIndices() {
