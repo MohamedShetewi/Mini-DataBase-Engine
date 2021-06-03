@@ -9,14 +9,19 @@ public class Index implements Serializable {
     private String path;
     private final String[] columnNames;
     private final Range[][] columnRanges;
+    private final int columnsCount;
 
     public Index(String path, String[] columnNames, Hashtable<String, Object> minValPerCol, Hashtable<String, Object> maxValPerCol) {
-        int columnsCount = columnNames.length;
+        this.columnsCount = columnNames.length;
         this.path = path;
         this.columnNames = columnNames;
         columnRanges = new Range[columnsCount][10];
         for (int i = 0; i < columnsCount; i++)
             columnRanges[i] = buildRanges(minValPerCol.get(columnNames[i]), maxValPerCol.get(columnNames[i]));
+    }
+
+    public int getColumnsCount() {
+        return columnsCount;
     }
 
     private Range[] buildRanges(Object minVal, Object maxVal) {
@@ -34,8 +39,8 @@ public class Index implements Serializable {
         max.put("ID", new Date(((Date) min.get("ID")).getTime() + 3000));
         System.out.println(max.get("ID"));
         Index index = new Index("", new String[]{"employer", "ID"}, min, max);
-        System.out.println(index.getPosition(new Date(new Date().getTime()+2900),1));
-        System.out.println(Arrays.toString(index.columnRanges[0]) +"\n"+ Arrays.toString(index.columnRanges[1]));
+        System.out.println(index.getPosition(new Date(new Date().getTime() + 2900), 1));
+        System.out.println(Arrays.toString(index.columnRanges[0]) + "\n" + Arrays.toString(index.columnRanges[1]));
     }
 
     private Range[] buildNumbersRanges(Object minVal, Object maxVal) {

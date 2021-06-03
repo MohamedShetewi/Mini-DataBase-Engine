@@ -419,7 +419,7 @@ public class DBApp implements DBAppInterface {
         return arr;
     }
 
-    public Object searchInsideIndex(Index index, Hashtable<String, Object> colNameValue) throws IOException, ClassNotFoundException {
+    public Vector<Bucket> searchInsideIndex(Index index, Hashtable<String, Object> colNameValue) throws IOException, ClassNotFoundException {
         Object grid = deserializeObject(index.getPath());
         int[] indices = new int[colNameValue.size()];
         String[] columnNames = index.getColumnNames();
@@ -427,7 +427,19 @@ public class DBApp implements DBAppInterface {
             indices[i] = index.getPosition(colNameValue.get(columnNames[i]), i);
         for (int x : indices)
             grid = ((Object[]) grid)[x];
-        return grid;
+        int level = index.getColumnsCount() - colNameValue.size();
+        Vector<Bucket> buckets = new Vector<>();
+        getResultBuckets(grid, level, buckets);
+        return buckets;
+    }
+
+    private void getResultBuckets(Object grid, int curLevel, Vector<Bucket> buckets) {
+        if (curLevel == 0) {
+            buckets.addAll((Vector<Bucket>) grid);
+            return;
+        }
+        for (int i = 0; i < 10; i++)
+            getResultBuckets(((Object[]) grid)[i], curLevel - 1, buckets);
     }
 
     @Override
