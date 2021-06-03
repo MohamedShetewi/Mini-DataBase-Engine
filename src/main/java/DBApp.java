@@ -424,7 +424,7 @@ public class DBApp implements DBAppInterface {
         return arr;
     }
 
-    public Object searchInsideIndex(Index index, Hashtable<String, Object> colNameValue) throws IOException, ClassNotFoundException {
+    public Vector<Bucket> searchInsideIndex(Index index, Hashtable<String, Range> colNameValue) throws IOException, ClassNotFoundException {
         Object grid = deserializeObject(index.getPath());
         int[] indices = new int[colNameValue.size()];
         String[] columnNames = index.getColumnNames();
@@ -432,7 +432,19 @@ public class DBApp implements DBAppInterface {
             indices[i] = index.getPosition(colNameValue.get(columnNames[i]), i);
         for (int x : indices)
             grid = ((Object[]) grid)[x];
-        return grid;
+        int level = index.getColumnsCount() - colNameValue.size();
+        Vector<Bucket> buckets = new Vector<>();
+        getResultBuckets(grid, level, buckets);
+        return buckets;
+    }
+
+    private void getResultBuckets(Object grid, int curLevel, Vector<Bucket> buckets) {
+        if (curLevel == 0) {
+            buckets.addAll((Vector<Bucket>) grid);
+            return;
+        }
+        for (int i = 0; i < 10; i++)
+            getResultBuckets(((Object[]) grid)[i], curLevel - 1, buckets);
     }
 
     @Override
@@ -750,7 +762,7 @@ public class DBApp implements DBAppInterface {
     }
 
     @Override
-    public Iterator selectFromTable(SQLTerm[] sqlTerms, String[] arrayOperators) throws IOException, DBAppException, ClassNotFoundException {
+    public Iterator selectFromTable(SQLTerm[] sqlTerms, String[] arrayOperators) throws IOException, DBAppException, ClassNotFoundException, ParseException {
         if (sqlTerms.length - 1 != arrayOperators.length)
             throw new DBAppException("Number of terms and operators does not match.");
 
@@ -761,14 +773,41 @@ public class DBApp implements DBAppInterface {
 
         // getting the table Object we want to select from
         Table targetTable = (Table) deserializeObject("src/main/resources/data/Tables/" + targetTableName + ".ser");
-
+        Object[] tableInfo = getTableInfo(targetTableName);
         Vector<Page> tablePages = targetTable.getPages();
         Stack<Vector<Hashtable<String, Object>>> termsSets = new Stack<>();
 
         Vector<Pair> indicesWithTerms = isIndexPreferable(sqlTerms, arrayOperators, targetTable);
-        if (indicesWithTerms != null || indicesWithTerms.size() > 1) {
+        HashMap<String,Vector<SQLTerm>> hashMapOfTerms = hashingTerms(sqlTerms);
 
+        if (indicesWithTerms != null || indicesWithTerms.size() > 1) {
+            for (Pair pair:indicesWithTerms){
+                Index index = pair.getIndex();
+                Vector<SQLTerm> indexTerms = pair.getTerms();
+                if (index != null){
+                    Hashtable<String,Range> termsRanges = new Hashtable<>();
+                    for(SQLTerm indexTerm:indexTerms){
+                        Vector<SQLTerm> terms = hashMapOfTerms.get(indexTerm.get_strColumnName());
+                        Range range = new Range((Comparable) ((Hashtable<String,Object>)tableInfo[1]).get(indexTerm.get_strColumnName()),(Comparable) ((Hashtable<String,Object>)tableInfo[2]).get(indexTerm.get_strColumnName()));
+                        for (SQLTerm term:terms) {
+                            range = updateColumnRange(term, tableInfo, range);
+                            if (range == null)
+                                return new Vector<>().iterator();
+                        }
+                        termsRanges.put(indexTerm.get_strColumnName(),range);
+                    }
+                    Vector<Bucket> buckets = searchInsideIndex(index,termsRanges);
+                }
+                else {
+                    for (SQLTerm term:pair.getTerms()){
+                        Vector<Hashtable<String, Object>> vector = isValidTerm(term, tablePages, clusteringColumnName);
+                        termsSets.add(vector);
+                    }
+                }
+            }
         }
+
+
         for (int i = sqlTerms.length - 1; i >= 0; i--) {
             Vector<Hashtable<String, Object>> vector = isValidTerm(sqlTerms[i], tablePages, clusteringColumnName);
             termsSets.add(vector);
@@ -801,6 +840,32 @@ public class DBApp implements DBAppInterface {
         return queryResult.iterator();
     }
 
+    private HashMap<String, Vector<SQLTerm>> hashingTerms(SQLTerm[] sqlTerms) {
+        HashMap<String, Vector<SQLTerm>> hashMap = new HashMap<>();
+        for (SQLTerm term:sqlTerms)
+            hashMap.put(term.get_strColumnName(), new Vector<>());
+        for (SQLTerm term:sqlTerms)
+            hashMap.get(term.get_strColumnName()).add(term);
+        return hashMap;
+    }
+
+    private Range updateColumnRange(SQLTerm term, Object[] tableInfo, Range range) throws DBAppException {
+        Range newRange = null;
+        switch (term.get_strOperator()) {
+            case "=":
+                newRange = ((Comparable) term.get_objValue()).compareTo(range.getMinVal()) >=0 && ((Comparable) term.get_objValue()).compareTo(range.getMaxVal()) <=0? new Range((Comparable) term.get_objValue(),(Comparable) term.get_objValue()):null;
+            case ">":
+            case ">=":
+                newRange =  new Range(((Comparable) term.get_objValue()).compareTo(range.getMinVal())>0?(Comparable) term.get_objValue():range.getMinVal(),range.getMaxVal());
+            case "<":
+            case "<=":
+                newRange = new Range(range.getMinVal(), ((Comparable) term.get_objValue()).compareTo(range.getMaxVal())<0?(Comparable) term.get_objValue():range.getMaxVal());
+        }
+        if (newRange != null && newRange.getMaxVal().compareTo(newRange.getMinVal()) < 0)
+            newRange = null;
+        return newRange;
+    }
+
     private Vector<Pair> isIndexPreferable(SQLTerm[] sqlTerms, String[] arrayOperators, Table targetTable) {
         for (String operator : arrayOperators)
             if (!operator.equals("AND"))
@@ -815,7 +880,7 @@ public class DBApp implements DBAppInterface {
         for (Index index : tableIndices) {
             Vector<SQLTerm> validTerms = new Vector<>();
             for (String dimensionName : index.getColumnNames()) {
-                if (termsColumnNames.contains(dimensionName)) {
+                if (termsColumnNames.contains(dimensionName) && !sqlTerms[termsColumnNames.indexOf(dimensionName)].get_strOperator().equals("!=")) {
                     validTerms.add(sqlTerms[termsColumnNames.indexOf(dimensionName)]);
                     termsVisited[termsColumnNames.indexOf(dimensionName)] = true;
                     continue;

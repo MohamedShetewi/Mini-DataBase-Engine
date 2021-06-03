@@ -17,7 +17,7 @@ public interface DBAppInterface {
 
     void deleteFromTable(String tableName, Hashtable<String, Object> columnNameValue) throws DBAppException, IOException, ClassNotFoundException, ParseException;
 
-    Iterator selectFromTable(SQLTerm[] sqlTerms, String[] arrayOperators) throws DBAppException, IOException, ClassNotFoundException;
+    Iterator selectFromTable(SQLTerm[] sqlTerms, String[] arrayOperators) throws DBAppException, IOException, ClassNotFoundException, ParseException;
 
 
 }
