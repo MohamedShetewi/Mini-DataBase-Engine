@@ -428,10 +428,13 @@ public class DBApp implements DBAppInterface {
         Object grid = deserializeObject(index.getPath());
         int[] indices = new int[colNameValue.size()];
         String[] columnNames = index.getColumnNames();
+
         for (int i = 0; i < indices.length; i++)
             indices[i] = index.getPosition(colNameValue.get(columnNames[i]), i);
+
         for (int x : indices)
             grid = ((Object[]) grid)[x];
+
         int level = index.getColumnsCount() - colNameValue.size();
         Vector<Bucket> buckets = new Vector<>();
         getResultBuckets(grid, level, buckets);
@@ -440,7 +443,8 @@ public class DBApp implements DBAppInterface {
 
     private void getResultBuckets(Object grid, int curLevel, Vector<Bucket> buckets) {
         if (curLevel == 0) {
-            buckets.addAll((Vector<Bucket>) grid);
+            Cell c = (Cell) grid;
+            buckets.addAll(c.getBuckets());
             return;
         }
         for (int i = 0; i < 10; i++)
@@ -468,7 +472,7 @@ public class DBApp implements DBAppInterface {
         int[] dimensions = new int[columnNames.length];
         Arrays.fill(dimensions, 10);
 
-        Object gridIndex = Array.newInstance(Vector.class, dimensions);
+        Object gridIndex = Array.newInstance(Cell.class, dimensions);
 
     }
 
@@ -778,28 +782,27 @@ public class DBApp implements DBAppInterface {
         Stack<Vector<Hashtable<String, Object>>> termsSets = new Stack<>();
 
         Vector<Pair> indicesWithTerms = isIndexPreferable(sqlTerms, arrayOperators, targetTable);
-        HashMap<String,Vector<SQLTerm>> hashMapOfTerms = hashingTerms(sqlTerms);
+        HashMap<String, Vector<SQLTerm>> hashMapOfTerms = hashingTerms(sqlTerms);
 
         if (indicesWithTerms != null || indicesWithTerms.size() > 1) {
-            for (Pair pair:indicesWithTerms){
+            for (Pair pair : indicesWithTerms) {
                 Index index = pair.getIndex();
                 Vector<SQLTerm> indexTerms = pair.getTerms();
-                if (index != null){
-                    Hashtable<String,Range> termsRanges = new Hashtable<>();
-                    for(SQLTerm indexTerm:indexTerms){
+                if (index != null) {
+                    Hashtable<String, Range> termsRanges = new Hashtable<>();
+                    for (SQLTerm indexTerm : indexTerms) {
                         Vector<SQLTerm> terms = hashMapOfTerms.get(indexTerm.get_strColumnName());
-                        Range range = new Range((Comparable) ((Hashtable<String,Object>)tableInfo[1]).get(indexTerm.get_strColumnName()),(Comparable) ((Hashtable<String,Object>)tableInfo[2]).get(indexTerm.get_strColumnName()));
-                        for (SQLTerm term:terms) {
+                        Range range = new Range((Comparable) ((Hashtable<String, Object>) tableInfo[1]).get(indexTerm.get_strColumnName()), (Comparable) ((Hashtable<String, Object>) tableInfo[2]).get(indexTerm.get_strColumnName()));
+                        for (SQLTerm term : terms) {
                             range = updateColumnRange(term, tableInfo, range);
                             if (range == null)
                                 return new Vector<>().iterator();
                         }
-                        termsRanges.put(indexTerm.get_strColumnName(),range);
+                        termsRanges.put(indexTerm.get_strColumnName(), range);
                     }
-                    Vector<Bucket> buckets = searchInsideIndex(index,termsRanges);
-                }
-                else {
-                    for (SQLTerm term:pair.getTerms()){
+                    Vector<Bucket> buckets = searchInsideIndex(index, termsRanges);
+                } else {
+                    for (SQLTerm term : pair.getTerms()) {
                         Vector<Hashtable<String, Object>> vector = isValidTerm(term, tablePages, clusteringColumnName);
                         termsSets.add(vector);
                     }
@@ -842,9 +845,9 @@ public class DBApp implements DBAppInterface {
 
     private HashMap<String, Vector<SQLTerm>> hashingTerms(SQLTerm[] sqlTerms) {
         HashMap<String, Vector<SQLTerm>> hashMap = new HashMap<>();
-        for (SQLTerm term:sqlTerms)
+        for (SQLTerm term : sqlTerms)
             hashMap.put(term.get_strColumnName(), new Vector<>());
-        for (SQLTerm term:sqlTerms)
+        for (SQLTerm term : sqlTerms)
             hashMap.get(term.get_strColumnName()).add(term);
         return hashMap;
     }
@@ -853,13 +856,13 @@ public class DBApp implements DBAppInterface {
         Range newRange = null;
         switch (term.get_strOperator()) {
             case "=":
-                newRange = ((Comparable) term.get_objValue()).compareTo(range.getMinVal()) >=0 && ((Comparable) term.get_objValue()).compareTo(range.getMaxVal()) <=0? new Range((Comparable) term.get_objValue(),(Comparable) term.get_objValue()):null;
+                newRange = ((Comparable) term.get_objValue()).compareTo(range.getMinVal()) >= 0 && ((Comparable) term.get_objValue()).compareTo(range.getMaxVal()) <= 0 ? new Range((Comparable) term.get_objValue(), (Comparable) term.get_objValue()) : null;
             case ">":
             case ">=":
-                newRange =  new Range(((Comparable) term.get_objValue()).compareTo(range.getMinVal())>0?(Comparable) term.get_objValue():range.getMinVal(),range.getMaxVal());
+                newRange = new Range(((Comparable) term.get_objValue()).compareTo(range.getMinVal()) > 0 ? (Comparable) term.get_objValue() : range.getMinVal(), range.getMaxVal());
             case "<":
             case "<=":
-                newRange = new Range(range.getMinVal(), ((Comparable) term.get_objValue()).compareTo(range.getMaxVal())<0?(Comparable) term.get_objValue():range.getMaxVal());
+                newRange = new Range(range.getMinVal(), ((Comparable) term.get_objValue()).compareTo(range.getMaxVal()) < 0 ? (Comparable) term.get_objValue() : range.getMaxVal());
         }
         if (newRange != null && newRange.getMaxVal().compareTo(newRange.getMinVal()) < 0)
             newRange = null;
@@ -1219,6 +1222,7 @@ public class DBApp implements DBAppInterface {
      * @throws ParseException
      */
 
+
     Object[] getTableInfo(String tableName) throws IOException, ParseException {
         FileReader metadata = new FileReader("src/main/resources/metadata.csv");
         BufferedReader br = new BufferedReader(metadata);
@@ -1258,7 +1262,7 @@ public class DBApp implements DBAppInterface {
         return new Object[]{colDataTypes, colMin, colMax, clusteringType, clusteringCol};
     }
 
-    public Iterator parseSQL( StringBuffer strbufSQL ) throws DBAppException{
+    public Iterator parseSQL(StringBuffer strbufSQL) throws DBAppException {
 
         SQLiteLexer lexer = new SQLiteLexer(CharStreams.fromString(strbufSQL.toString()));
         MiniSQLParser parser = new MiniSQLParser(new CommonTokenStream(lexer));

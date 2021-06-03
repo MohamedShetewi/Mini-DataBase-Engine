@@ -1,8 +1,4 @@
 import java.io.Serializable;
-import java.lang.reflect.Array;
-import java.text.DateFormat;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.*;
 
 public class Index implements Serializable {
@@ -24,7 +20,7 @@ public class Index implements Serializable {
         return columnsCount;
     }
 
-    private Range[] buildRanges(Object minVal, Object maxVal) {
+    private Range[] buildRanges(Object minVal, Object maxVal)  {
         if (minVal instanceof String)
             return buildStringRanges();
         return buildNumbersRanges(minVal, maxVal);
@@ -90,13 +86,15 @@ public class Index implements Serializable {
     }
 
     public int getPosition(Object o, int column) {
+        if(o instanceof String)
+            o=((String)o).toLowerCase();
         for (int i = 0; i < 10; i++)
-            if (Inside(columnRanges[column][i], (Comparable) o))
+            if (isInRange(columnRanges[column][i], (Comparable) o))
                 return i;
         return -1;
     }
 
-    private boolean Inside(Range range, Comparable o) {
+    private boolean isInRange(Range range, Comparable o) {
         return o.compareTo(range.maxVal) <= 0 && o.compareTo(range.minVal) >= 0;
     }
 
