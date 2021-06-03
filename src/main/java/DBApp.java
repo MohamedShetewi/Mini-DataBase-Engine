@@ -3,8 +3,6 @@ import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.ParseTreeWalker;
 
-import org.antlr.v4.runtime.misc.Pair;
-
 import java.io.*;
 import java.lang.reflect.Array;
 import java.text.ParseException;
@@ -77,6 +75,7 @@ public class DBApp implements DBAppInterface {
 
 
         File tableDirectory = new File("src/main/resources/data/Tables/" + tableName);
+        File indexDirectory = new File("src/main/resources/data/Tables/" + tableName+"/Indices");
 
         if (tableDirectory.exists())
             throw new DBAppException();
@@ -551,11 +550,22 @@ public class DBApp implements DBAppInterface {
             if (!columnsInfo.containsKey(colName))
                 throw new DBAppException("No such column exits!");
 
+        Table table = (Table) deserializeObject("src/main/resources/data/Tables/" + tableName + ".ser");
+
+        String indexPath = "src/main/resources/data/Tables/" + tableName + "/Indices/index" + table.getIndexCounter() + ".ser";
+        Index newIndex =  new Index(indexPath, columnNames, (Hashtable<String, Object>) tableInfo[1], (Hashtable<String, Object>) tableInfo[2]);
+        for(Index idx : table.getIndices())
+            if(newIndex.isSameIndex(idx))
+                throw new DBAppException("Index already exists!");
+
         updateMetaDataFile(tableName, columnNames);
 
-        Table table = (Table) deserializeObject("src/main/resources/data/Tables/" + tableName + ".ser");
-        String indexPath = "src/main/resources/data/Tables/" + tableName + "/index" + table.getIndexCounter() + ".ser";
+        table.setIndexCounter(table.getIndexCounter()+1);
         table.getIndices().add(new Index(indexPath, columnNames, (Hashtable<String, Object>) tableInfo[1], (Hashtable<String, Object>) tableInfo[2]));
+
+        Vector<Page> tablePages = table.getPages();
+        for(Page page : tablePages)
+            updateIndexByPage(table, page, clusteringKey);
 
 
         int[] dimensions = new int[columnNames.length];
@@ -563,6 +573,11 @@ public class DBApp implements DBAppInterface {
 
         Object gridIndex = Array.newInstance(Vector.class, dimensions);
 
+
+
+        delete("src/main/resources/data/Tables/" + tableName + ".ser");
+        serializeObject(table,"src/main/resources/data/Tables/" + tableName + ".ser");
+        serializeObject(gridIndex, newIndex.getPath());
     }
 
 

@@ -20,7 +20,7 @@ public class Index implements Serializable {
         return columnsCount;
     }
 
-    private Range[] buildRanges(Object minVal, Object maxVal)  {
+    private Range[] buildRanges(Object minVal, Object maxVal) {
         if (minVal instanceof String)
             return buildStringRanges();
         return buildNumbersRanges(minVal, maxVal);
@@ -86,8 +86,8 @@ public class Index implements Serializable {
     }
 
     public int getPosition(Object o, int column) {
-        if(o instanceof String)
-            o=((String)o).toLowerCase();
+        if (o instanceof String)
+            o = ((String) o).toLowerCase();
         for (int i = 0; i < 10; i++)
             if (isInRange(columnRanges[column][i], (Comparable) o))
                 return i;
@@ -111,6 +111,16 @@ public class Index implements Serializable {
     }
 
 
+    public boolean isSameIndex(Index index) {
+        if (index.getColumnNames().length != this.columnNames.length)
+            return false;
+
+        for (int i = 0; i < index.getColumnNames().length; i++)
+            if (!index.getColumnNames()[i].equals(this.columnNames[i]))
+                return false;
+
+        return true;
+    }
 
 
 }
