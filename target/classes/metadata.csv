@@ -1,0 +1,7 @@
+Table Name,Column Name,Column Type,ClusteringKey,Indexed,min,max
+student,age,java.lang.Integer,False,False,-2147483648,2147483647
+student,name,java.lang.String,False,False,a,zzzzzzzzzz
+student,id,java.lang.Integer,True,False,-2147483648,2147483647
+student,age,java.lang.Integer,False,False,-2147483648,2147483647
+student,name,java.lang.String,False,False,a,zzzzzzzzzz
+student,id,java.lang.Integer,True,False,-2147483648,2147483647
