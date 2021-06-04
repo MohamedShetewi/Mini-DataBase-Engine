@@ -5,11 +5,11 @@ import org.antlr.v4.runtime.tree.ParseTreeWalker;
 
 import java.io.*;
 import java.lang.reflect.Array;
+import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.text.DateFormat;
-import java.util.stream.Stream;
 
 
 public class DBApp implements DBAppInterface {
@@ -736,7 +736,7 @@ public class DBApp implements DBAppInterface {
         if (clusteringKeyExists)
             deleted = deleteFromTableBinarySearch(targetTable, columnNameValue, clusteringKey);//binary search for the clustering key
         else
-            deleted = deleteFromTableLinearSearch(targetTable, columnNameValue, clusteringKey);// linear deletion
+            deleted = deleteFromTable(targetTable, columnNameValue, clusteringKey);
         if (!deleted) {
             System.out.println("No Rows matching the entries were found. Row: " + columnNameValue);
             return;
@@ -773,11 +773,12 @@ public class DBApp implements DBAppInterface {
      *
      * @param columnNameValue the column key-value pairs to which records will be compared with
      * @param clusteringKey   the clustering key of the page's table
+     * @param deletedRows
      * @return 0 if no rows are deleted,-1 if all rows are deleted and 1 if some (but not all) rows are deleted.
      * @throws ClassNotFoundException If an error occurred in the stored table pages format
      * @throws IOException            If an I/O error occurred
      */
-    private int deleteFromPage(Page p, Hashtable<String, Object> columnNameValue, String clusteringKey) throws IOException, ClassNotFoundException {
+    private int deleteFromPage(Page p, Hashtable<String, Object> columnNameValue, String clusteringKey, Vector<Object> deletedRows) throws IOException, ClassNotFoundException {
         //read the page from disk
         Vector<Hashtable<String, Object>> rows = (Vector<Hashtable<String, Object>>) deserializeObject(p.getPath());
         int state = 0;//return state
@@ -790,6 +791,7 @@ public class DBApp implements DBAppInterface {
                 for (String key : columnNameValue.keySet())
                     delete &= curRow.containsKey(key) && compare(curRow.get(key), columnNameValue.get(key)) == 0;
                 if (delete) {
+                    deletedRows.add(rows.get(idxInsidePage).get(clusteringKey));
                     rows.remove(idxInsidePage);
                     state = 1;
                 }
@@ -804,6 +806,7 @@ public class DBApp implements DBAppInterface {
                     delete &= curRow.containsKey(key) && compare(curRow.get(key), columnNameValue.get(key)) == 0;//checks if the curRow contains the key and the values match
 
                 if (delete) {
+                    deletedRows.add(curRow.get(clusteringKey));
                     rowsIterator.remove();
                     state = 1;
                 }
@@ -830,23 +833,103 @@ public class DBApp implements DBAppInterface {
      * @throws ClassNotFoundException If an error occurred in the stored table pages format
      * @throws IOException            If an I/O error occurred
      */
-    private boolean deleteFromTableLinearSearch(Table table, Hashtable<String, Object> columnNameValue, String clusteringKey) throws IOException, ClassNotFoundException {
-        Vector<Page> pages = table.getPages();
-        Iterator<Page> pagesIterator = pages.iterator();
-        boolean deletedRows = false;//is set to true if any rows are deleted
-        while (pagesIterator.hasNext()) {
-            Page p = pagesIterator.next();
-            int state = deleteFromPage(p, columnNameValue, clusteringKey);//returns -1 if the page becomes empty
-            //update the page's file in disk
-            if (state == -1) {
-                //if the page is empty , dont save the page to disk and remove it from the vector
-                pagesIterator.remove();
-                deletedRows = true;
-            } else {
-                deletedRows |= state == 1;
+    private boolean deleteFromTable(Table table, Hashtable<String, Object> columnNameValue, String clusteringKey) throws IOException, ClassNotFoundException {
+        Vector<Index> indices = table.getIndices();
+        int maximumMatch = 0;
+        int maximumMatchIndex = -1;
+        for (int i = 0; i < indices.size(); i++) {
+            int curMatch = 0;
+            for (String columnName : indices.get(i).getColumnNames()) {
+                if (!columnNameValue.containsKey(columnName))
+                    break;
+                curMatch++;
+            }
+            if (curMatch > maximumMatch) {
+                maximumMatch = curMatch;
+                maximumMatchIndex = i;
             }
         }
-        return deletedRows;
+        Vector<Object> deletedRows = new Vector<>();//is set to true if any rows are deleted
+        if (maximumMatch == 0) {
+            deleteFromTableLinear(table, columnNameValue, clusteringKey, deletedRows);
+        } else {
+            Index index = indices.get(maximumMatchIndex);
+            Object grid = deserializeObject(index.getPath());
+            DeleteFromIndex(index, grid, columnNameValue, clusteringKey, deletedRows);
+        }
+        for (Index index : indices) {
+            Object grid = deserializeObject(index.getPath());
+            deleteReferenceFromIndex(index, grid, deletedRows, columnNameValue);
+            delete(index.getPath());
+            serializeObject(grid, index.getPath());
+        }
+        return deletedRows.size() > 0;
+    }
+
+    private void deleteFromTableLinear(Table table, Hashtable<String, Object> columnNameValue, String clusteringKey, Vector<Object> deletedRows) throws IOException, ClassNotFoundException {
+        Vector<Page> pages = table.getPages();
+        Iterator<Page> pagesIterator = pages.iterator();
+        while (pagesIterator.hasNext()) {
+            Page p = pagesIterator.next();
+            int state = deleteFromPage(p, columnNameValue, clusteringKey, deletedRows);//returns -1 if the page becomes empty
+            //update the page's file in disk
+            if (state == -1)
+                //if the page is empty , dont save the page to disk and remove it from the vector
+                pagesIterator.remove();
+        }
+    }
+
+    private void DeleteFromIndex(Index index, Object grid, Hashtable<String, Object> columnNameValue, String clusteringKey, Vector<Object> deletedRows) throws IOException, ClassNotFoundException {
+        Hashtable<String, Range> colNameRange = getColNameRange(index, columnNameValue);
+        Vector<Vector<Bucket>> cells = searchInsideIndex(index, grid, colNameRange);
+        HashSet<RowReference> pages = new HashSet<>();
+        for (Vector<Bucket> cell : cells) {
+            for (Bucket bucket : cell) {
+                Hashtable<Hashtable<String, Object>, Vector<RowReference>> references = (Hashtable<Hashtable<String, Object>, Vector<RowReference>>) deserializeObject(bucket.getPath());
+                for (Hashtable<String, Object> compressedRow : references.keySet()) {
+                    boolean searchInsidePage = true;
+                    for (String column : columnNameValue.keySet())
+                        searchInsidePage &= compressedRow.contains(column) && compare(columnNameValue.get(column), compressedRow.get(column)) == 0;
+                    if (searchInsidePage)
+                        pages.addAll(references.get(compressedRow));
+                }
+            }
+        }
+        for (RowReference rowReference : pages) {
+            Hashtable<String, Object> clusteringKeyValue = new Hashtable<>();
+            clusteringKeyValue.put(clusteringKey, rowReference.getClusteringValue());
+            deleteFromPage((Page) deserializeObject(rowReference.getPagePath()), clusteringKeyValue, clusteringKey, deletedRows);
+        }
+    }
+
+    private void deleteReferenceFromIndex(Index index, Object grid, Vector<Object> deletedRows, Hashtable<String, Object> columnNameValue) throws IOException, ClassNotFoundException {
+        Hashtable<String, Range> colNameRange = getColNameRange(index, columnNameValue);
+        Vector<Vector<Bucket>> cells = searchInsideIndex(index, grid, colNameRange);
+        for (Vector<Bucket> cell : cells) {
+            for (Bucket bucket : cell) {
+                Hashtable<Hashtable<String, Object>, Vector<RowReference>> references = (Hashtable<Hashtable<String, Object>, Vector<RowReference>>) deserializeObject(bucket.getPath());
+                Iterator<Map.Entry<Hashtable<String, Object>, Vector<RowReference>>> iterator = references.entrySet().iterator();
+                while (iterator.hasNext()) {
+                    Vector<RowReference> rowReferences = iterator.next().getValue();
+                    rowReferences.removeIf(rowReference -> deletedRows.contains(rowReference.getClusteringValue()));
+                    if (rowReferences.size() == 0)
+                        iterator.remove();
+                }
+            }
+        }
+    }
+
+    private Hashtable<String, Range> getColNameRange(Index index, Hashtable<String, Object> columnNameValue) {
+        Hashtable<String, Range> colNameRange = new Hashtable<>();
+        String[] columnNames = index.getColumnNames();
+        for (String columnName : columnNames) {
+            if (!columnNameValue.containsKey(columnName))
+                break;
+            Comparable val = (Comparable) columnNameValue.get(columnName);
+            colNameRange.put(columnName, new Range(val, val));
+
+        }
+        return colNameRange;
     }
 
     /**
@@ -866,7 +949,8 @@ public class DBApp implements DBAppInterface {
         if (index >= pages.size())//row not found
             return false;
         Page page = pages.get(index);//page that contains the row to delete
-        int state = deleteFromPage(page, columnNameValue, clusteringKey);//returns -1 if the page is empty
+        Vector<Object> deletedRows = new Vector<>();
+        int state = deleteFromPage(page, columnNameValue, clusteringKey, deletedRows);//returns -1 if the page is empty
         if (state == -1) {
             //if the page is empty,remove it from the vector
             pages.remove(index);
