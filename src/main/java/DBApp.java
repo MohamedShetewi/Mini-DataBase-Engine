@@ -791,15 +791,36 @@ public class DBApp implements DBAppInterface {
                         }
                         termsRanges.put(indexTerm.get_strColumnName(),range);
                     }
-                    Vector<Bucket> buckets = searchInsideIndex(index,termsRanges);
+                    Vector<Bucket> buckets = new Vector<>();
+                    Vector<Vector<Bucket>> cells = searchInsideIndex(index, termsRanges);
+                    for (Vector<Bucket> vector : cells)
+                            buckets.addAll(vector);
+                    Vector<SQLTerm> terms = new Vector<>();
+                    for(SQLTerm indexTerm:indexTerms)
+                        terms.addAll(hashMapOfTerms.get(indexTerm.get_strColumnName()));
+                    Vector<Hashtable<String, Object>> vector = getValidRowsInBucket(terms, buckets, clusteringColumnName);
+                    termsSets.add(vector);
                 }
                 else {
-                    for (SQLTerm term:pair.getTerms()){
-                        Vector<Hashtable<String, Object>> vector = isValidTerm(term, tablePages, clusteringColumnName);
-                        termsSets.add(vector);
+                    for (SQLTerm nonIndexedTerm:pair.getTerms()){
+                        Vector<SQLTerm> terms = hashMapOfTerms.get(nonIndexedTerm.get_strColumnName());
+                        for (SQLTerm term:terms) {
+                            Vector<Hashtable<String, Object>> vector = isValidTerm(term, tablePages, clusteringColumnName);
+                            termsSets.add(vector);
+                        }
                     }
                 }
+
             }
+            for (String arrayOperator : arrayOperators) {
+                Vector<Hashtable<String, Object>> a = termsSets.pop();
+                Vector<Hashtable<String, Object>> b = termsSets.pop();
+                Vector<Hashtable<String, Object>> aIntersectB = rowsIntersection(a, b, clusteringColumnName);
+                termsSets.push(aIntersectB);
+            }
+            Vector<Hashtable<String, Object>> queryResult;
+            queryResult = termsSets.pop();
+            return queryResult.iterator();
         }
 
 
@@ -833,6 +854,45 @@ public class DBApp implements DBAppInterface {
         Vector<Hashtable<String, Object>> queryResult;
         queryResult = termsSets.pop();
         return queryResult.iterator();
+    }
+
+    private Vector<Hashtable<String, Object>> getValidRowsInBucket(Vector<SQLTerm> terms, Vector<Bucket> buckets, String clusteringColumnName) throws IOException, ClassNotFoundException {
+        Hashtable<String,Vector<Object>> rows = new Hashtable<>();
+        for(Bucket bucket:buckets){
+            Hashtable<Hashtable<String,Object>,Vector<RowReference>> bucketObject = (Hashtable<Hashtable<String, Object>, Vector<RowReference>>) deserializeObject(bucket.getPath());
+            for (Hashtable<String,Object> key:bucketObject.keySet()) {
+                boolean valid = true;
+                for (SQLTerm term : terms)
+                    if (!booleanValueOfTerm(key,term)){
+                        valid = false;
+                        break;
+                    }
+                if (valid){
+                    Vector<RowReference> rowReferences = bucketObject.get(key);
+                    for (RowReference rowReference: rowReferences) {
+                        Vector<Object> clusteringValues = new Vector<>();
+                        if (rows.containsKey(rowReference.getPath()))
+                            clusteringValues = rows.get(rowReference.getPath());
+                        clusteringValues.add(rowReference.getClusteringValue());
+                        rows.put(rowReference.getPath(),clusteringValues);
+                    }
+                }
+            }
+
+        }
+        return getCorrespondingRows(rows,clusteringColumnName);
+    }
+
+    private Vector<Hashtable<String, Object>> getCorrespondingRows(Hashtable<String, Vector<Object>> gridRecords, String clusteringColumnName) throws IOException, ClassNotFoundException {
+        Vector<Hashtable<String,Object>> result = new Vector<>();
+        for (String pagePath:gridRecords.keySet()){
+            Vector<Hashtable<String, Object>> currentPage = (Vector<Hashtable<String, Object>>) deserializeObject(pagePath);
+            for (Object value:gridRecords.get(pagePath)){
+                int index = searchInsidePage(currentPage,value,clusteringColumnName);
+                result.add(currentPage.get(index));
+            }
+        }
+        return result;
     }
 
     private HashMap<String, Vector<SQLTerm>> hashingTerms(SQLTerm[] sqlTerms) {

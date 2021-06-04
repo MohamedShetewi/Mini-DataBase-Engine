@@ -3,11 +3,19 @@ import java.io.Serializable;
 public class RowReference implements Serializable {
 
 
-    int pageNum;
+    String Path;
     Object clusteringValue;
 
-    public RowReference(int pageNum, Object clusteringValue) {
-        this.pageNum = pageNum;
+    public String getPath() {
+        return Path;
+    }
+
+    public Object getClusteringValue() {
+        return clusteringValue;
+    }
+
+    public RowReference(String path, Object clusteringValue) {
+        this.Path = path;
         this.clusteringValue = clusteringValue;
     }
 
