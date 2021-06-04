@@ -9,6 +9,7 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.text.DateFormat;
+import java.util.stream.Stream;
 
 
 public class DBApp implements DBAppInterface {
@@ -889,11 +890,25 @@ public class DBApp implements DBAppInterface {
         Object[] tableInfo = getTableInfo(targetTableName);
         Vector<Page> tablePages = targetTable.getPages();
         Stack<Vector<Hashtable<String, Object>>> termsSets = new Stack<>();
+        // getting the first terms which are anded together.
+        SQLTerm[] andedTerms = andedTerms(sqlTerms, arrayOperators);
+        if (andedTerms != null) {
+            SQLTerm[] restOfTerms = new SQLTerm[sqlTerms.length - andedTerms.length];
+            for (int i = 0; i < restOfTerms.length; i++)
+                restOfTerms[i] = sqlTerms[i + andedTerms.length];
+            sqlTerms = restOfTerms;
 
-        Vector<Pair> indicesWithTerms = isIndexPreferable(sqlTerms, arrayOperators, targetTable);
-        Hashtable<String, Vector<SQLTerm>> hashtableOfTerms = hashingTerms(sqlTerms);
+            String[] restOfOperators = new String[sqlTerms.length - andedTerms.length - 1];
+            for (int i = 0; i < restOfOperators.length; i++)
+                restOfOperators[i] = arrayOperators[i + restOfOperators.length];
+            arrayOperators = restOfOperators;
+        }
+        //
+        Vector<Hashtable<String, Object>> rowsByIndex = null;
+        Vector<Pair> indicesWithTerms = isIndexPreferable(andedTerms, targetTable);
+        Hashtable<String, Vector<SQLTerm>> hashtableOfTerms = hashingTerms(andedTerms);
 
-        if (indicesWithTerms != null || indicesWithTerms.size() > 1) {
+        if (indicesWithTerms != null) {
             for (Pair pair : indicesWithTerms) {
                 Index index = pair.getIndex();
                 Vector<SQLTerm> indexTerms = pair.getTerms();
@@ -929,15 +944,13 @@ public class DBApp implements DBAppInterface {
                     }
                 }
             }
-            while (termsSets.size() > 1){
+            while (termsSets.size() > 1) {
                 Vector<Hashtable<String, Object>> a = termsSets.pop();
                 Vector<Hashtable<String, Object>> b = termsSets.pop();
                 Vector<Hashtable<String, Object>> aIntersectB = rowsIntersection(a, b, clusteringColumnName);
                 termsSets.push(aIntersectB);
             }
-            Vector<Hashtable<String, Object>> queryResult;
-            queryResult = termsSets.pop();
-            return queryResult.iterator();
+            rowsByIndex = termsSets.pop();
         }
 
 
@@ -945,6 +958,9 @@ public class DBApp implements DBAppInterface {
             Vector<Hashtable<String, Object>> vector = isValidTerm(sqlTerms[i], tablePages, clusteringColumnName);
             termsSets.add(vector);
         }
+
+        if (rowsByIndex != null)
+            termsSets.add(rowsByIndex);
 
         for (String arrayOperator : arrayOperators) {
             Vector<Hashtable<String, Object>> a = termsSets.pop();
@@ -971,6 +987,20 @@ public class DBApp implements DBAppInterface {
         Vector<Hashtable<String, Object>> queryResult;
         queryResult = termsSets.pop();
         return queryResult.iterator();
+    }
+
+    private SQLTerm[] andedTerms(SQLTerm[] sqlTerms, String[] arrayOperators) {
+        int i = 0;
+        for (i = 0; i < arrayOperators.length; i++)
+            if (!arrayOperators[i].equals("AND"))
+                break;
+        if (i == 0)
+            return null;
+        SQLTerm[] firstPart = new SQLTerm[i + 1];
+        for (int j = 0; j < firstPart.length; j++)
+            firstPart[j] = sqlTerms[j];
+        return firstPart;
+
     }
 
     private Vector<Hashtable<String, Object>> getValidRowsInBucket(Vector<SQLTerm> terms, Vector<Bucket> buckets, String clusteringColumnName) throws IOException, ClassNotFoundException {
@@ -1044,21 +1074,23 @@ public class DBApp implements DBAppInterface {
         return newRange;
     }
 
-    private Vector<Pair> isIndexPreferable(SQLTerm[] sqlTerms, String[] arrayOperators, Table targetTable) {
-        for (String operator : arrayOperators)
-            if (!operator.equals("AND"))
-                return null;
+    private Vector<Pair> isIndexPreferable(SQLTerm[] sqlTerms, Table targetTable) {
+        if (sqlTerms == null)
+            return null;
+
         Vector<String> termsColumnNames = new Vector<>();
         boolean[] termsVisited = new boolean[sqlTerms.length];
         for (SQLTerm term : sqlTerms)
             termsColumnNames.add(term.get_strColumnName());
         Vector<Index> tableIndices = targetTable.getIndices();
-
         Vector<Pair> termsOfIndices = new Vector<>();
+        Collections.sort(tableIndices, Comparator.comparingInt(Index::getColumnsCount));
         for (Index index : tableIndices) {
             Vector<SQLTerm> validTerms = new Vector<>();
             for (String dimensionName : index.getColumnNames()) {
-                if (termsColumnNames.contains(dimensionName) && !sqlTerms[termsColumnNames.indexOf(dimensionName)].get_strOperator().equals("!=")) {
+                if (termsColumnNames.contains(dimensionName)
+                        && !sqlTerms[termsColumnNames.indexOf(dimensionName)].get_strOperator().equals("!=")
+                        && !termsVisited[termsColumnNames.indexOf(dimensionName)]) {
                     validTerms.add(sqlTerms[termsColumnNames.indexOf(dimensionName)]);
                     termsVisited[termsColumnNames.indexOf(dimensionName)] = true;
                     continue;
@@ -1073,6 +1105,8 @@ public class DBApp implements DBAppInterface {
             if (!termsVisited[i])
                 nonIndexedTerms.add(sqlTerms[i]);
         termsOfIndices.add(nonIndexedTerms);
+        if (termsOfIndices.size() == 1 && termsOfIndices.get(0).getIndex() == null)
+            return null;
         return termsOfIndices;
     }
 
