@@ -24,5 +24,7 @@ public class Bucket implements Serializable{
         this.numOfRecords = numOfRecords;
     }
 
-
+    public String getPath() {
+        return path;
+    }
 }

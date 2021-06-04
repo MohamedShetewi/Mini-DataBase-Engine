@@ -1,8 +1,4 @@
 import java.io.Serializable;
-import java.lang.reflect.Array;
-import java.text.DateFormat;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.*;
 
 public class Index implements Serializable {
@@ -10,6 +6,15 @@ public class Index implements Serializable {
     private final String[] columnNames;
     private final Range[][] columnRanges;
     private final int columnsCount;
+    private int numOfBuckets;
+
+    public int getNumOfBuckets() {
+        return numOfBuckets;
+    }
+
+    public void setNumOfBuckets(int numOfBuckets) {
+        this.numOfBuckets = numOfBuckets;
+    }
 
     public Index(String path, String[] columnNames, Hashtable<String, Object> minValPerCol, Hashtable<String, Object> maxValPerCol) {
         this.columnsCount = columnNames.length;
@@ -31,16 +36,16 @@ public class Index implements Serializable {
     }
 
     public static void main(String[] args) {
-        Hashtable<String, Object> max = new Hashtable<>();
-        Hashtable<String, Object> min = new Hashtable<>();
-        max.put("employer", "a");
-        min.put("employer", "aa");
-        min.put("ID", new Date());
-        max.put("ID", new Date(((Date) min.get("ID")).getTime() + 3000));
-        System.out.println(max.get("ID"));
-        Index index = new Index("", new String[]{"employer", "ID"}, min, max);
-        System.out.println(index.getPosition(new Date(new Date().getTime() + 2900), 1));
-        System.out.println(Arrays.toString(index.columnRanges[0]) + "\n" + Arrays.toString(index.columnRanges[1]));
+//        Hashtable<String, Object> max = new Hashtable<>();
+//        Hashtable<String, Object> min = new Hashtable<>();
+//        max.put("employer", "a");
+//        min.put("employer", "aa");
+//        min.put("ID", new Date());
+//        max.put("ID", new Date(((Date) min.get("ID")).getTime() + 3000));
+//        System.out.println(max.get("ID"));
+//        Index index = new Index("", new String[]{"employer", "ID"}, min, max);
+//        System.out.println(index.getPosition(new Date(new Date().getTime() + 2900), 1));
+//        System.out.println(Arrays.toString(index.columnRanges[0]) + "\n" + Arrays.toString(index.columnRanges[1]));
     }
 
     private Range[] buildNumbersRanges(Object minVal, Object maxVal) {
@@ -50,7 +55,7 @@ public class Index implements Serializable {
             if (i == 0) {
                 ranges[i] = new Range((Comparable) minVal, add(minVal, difference));
             } else {
-                Comparable min = ranges[i - 1].maxVal;
+                Comparable min = ranges[i - 1].getMaxVal();
                 Comparable max = add(min, difference);
                 ranges[i] = new Range(min, max);
             }
@@ -80,7 +85,7 @@ public class Index implements Serializable {
             if (i == 0) {
                 ranges[i] = new Range("a", "c");
             } else {
-                char previous = ((String) ranges[i - 1].maxVal).charAt(0);
+                char previous = ((String) ranges[i - 1].getMaxVal()).charAt(0);
                 String min = (char) (previous + 1) + "";
                 String max = (char) (previous + (i < 6 ? 3 : 2)) + "";
                 ranges[i] = new Range(min, max);
@@ -89,19 +94,20 @@ public class Index implements Serializable {
         return ranges;
     }
 
-    public int getPosition(Object o, int column) {
+    public Vector<Integer> getPosition(Range r, int column) {
+        Vector<Integer> ans = new Vector<>();
+        if (r.getMinVal() instanceof String) {
+            r.setMinVal(((String) r.getMinVal()).toLowerCase());
+            r.setMaxVal(((String) r.getMaxVal()).toLowerCase());
+        }
         for (int i = 0; i < 10; i++)
-            if (Inside(columnRanges[column][i], (Comparable) o))
-                return i;
-        return -1;
+            if (isInRange(columnRanges[column][i], r))
+                ans.add(i);
+        return ans;
     }
 
-    private boolean Inside(Range range, Comparable o) {
-        return o.compareTo(range.maxVal) <= 0 && o.compareTo(range.minVal) >= 0;
-    }
-
-    public void setPath(String path) {
-        this.path = path;
+    private boolean isInRange(Range r1, Range r2) {
+        return !(r1.getMaxVal().compareTo(r2.getMinVal()) < 0 || r1.getMinVal().compareTo(r2.getMaxVal()) > 0);
     }
 
     public String getPath() {
@@ -113,6 +119,14 @@ public class Index implements Serializable {
     }
 
 
+    public boolean isSameIndex(Index index) {
+        if (index.getColumnNames().length != this.columnNames.length)
+            return false;
 
+        for (int i = 0; i < index.getColumnNames().length; i++)
+            if (!index.getColumnNames()[i].equals(this.columnNames[i]))
+                return false;
 
+        return true;
+    }
 }
