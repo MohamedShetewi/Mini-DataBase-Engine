@@ -910,7 +910,8 @@ public class DBApp implements DBAppInterface {
                         termsRanges.put(indexTerm.get_strColumnName(), range);
                     }
                     Vector<Bucket> buckets = new Vector<>();
-                    Vector<Vector<Bucket>> cells = searchInsideIndex(index, termsRanges);
+                    Object grid = deserializeObject(index.getPath());
+                    Vector<Vector<Bucket>> cells = searchInsideIndex(index, grid, termsRanges);
                     for (Vector<Bucket> vector : cells)
                             buckets.addAll(vector);
                     Vector<SQLTerm> terms = new Vector<>();
@@ -988,10 +989,10 @@ public class DBApp implements DBAppInterface {
                     Vector<RowReference> rowReferences = bucketObject.get(key);
                     for (RowReference rowReference: rowReferences) {
                         Vector<Object> clusteringValues = new Vector<>();
-                        if (rows.containsKey(rowReference.getPath()))
-                            clusteringValues = rows.get(rowReference.getPath());
+                        if (rows.containsKey(rowReference.getPagePath()))
+                            clusteringValues = rows.get(rowReference.getPagePath());
                         clusteringValues.add(rowReference.getClusteringValue());
-                        rows.put(rowReference.getPath(),clusteringValues);
+                        rows.put(rowReference.getPagePath(),clusteringValues);
                     }
                 }
             }

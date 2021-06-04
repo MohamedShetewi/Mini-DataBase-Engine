@@ -4,10 +4,6 @@ import java.util.Vector;
 
 public class Bucket implements Serializable{
 
-    public String getPath() {
-        return path;
-    }
-
     private String path;
     private int numOfRecords;
 
