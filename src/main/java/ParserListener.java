@@ -72,8 +72,8 @@ public class ParserListener extends MiniSQLParserBaseListener {
                 switch (ctx.column_def(i).col_type().getText().toLowerCase()) {
                     case "int":
                         colType = "java.lang.Integer";
-                        colMin.put(colName, "" + Integer.MIN_VALUE);
-                        colMax.put(colName, "" + Integer.MAX_VALUE);
+                        colMin.put(colName, "" + 0);
+                        colMax.put(colName, "" + 100000);
                         break;
                     case "varchar":
                         colType = "java.lang.String";
@@ -87,8 +87,8 @@ public class ParserListener extends MiniSQLParserBaseListener {
                         break;
                     case "decimal":
                         colType = "java.lang.Double";
-                        colMin.put(colName, "" + Double.MIN_VALUE);
-                        colMax.put(colName, "" + Double.MAX_VALUE);
+                        colMin.put(colName, "" + 0.0);
+                        colMax.put(colName, "" + 100000.0);
                         break;
                 }
                 colNameType.put(colName, colType);

@@ -10,8 +10,6 @@ public class Table implements Serializable {
     private int indexCounter;
 
 
-
-
     public Table(String tableName) {
         this.tableName = tableName;
         this.pages = new Vector<>();
@@ -31,6 +29,12 @@ public class Table implements Serializable {
         return indices;
     }
 
+    public Page getPageByPath(String path) {
+        for (Page p : pages)
+            if (p.getPath().equals(path))
+                return p;
+        return null;
+    }
 
     public String getTableName() {
         return tableName;

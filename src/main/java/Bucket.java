@@ -23,4 +23,12 @@ public class Bucket implements Serializable{
     public String getPath() {
         return path;
     }
+
+    @Override
+    public String toString() {
+        return "Bucket{" +
+                "path='" + path + '\'' +
+                ", numOfRecords=" + numOfRecords +
+                '}';
+    }
 }
