@@ -9,7 +9,6 @@ import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
-import java.text.DateFormat;
 
 
 public class DBApp implements DBAppInterface {
@@ -186,6 +185,10 @@ public class DBApp implements DBAppInterface {
 
                             delete(followingPage.getPath());
                             serializeObject(followingPageRecords, followingPage.getPath());
+
+                            delete(curPage.getPath());
+                            serializeObject(pageRecords, curPage.getPath());
+
                             Vector<Object> deleted = new Vector<>();
                             deleted.add(lastRecord.get(primaryKey));
                             deleteFromIndex(t, deleted, lastRecord);
@@ -262,15 +265,18 @@ public class DBApp implements DBAppInterface {
     private void insertIntoIndex(Vector<Index> indices, Vector<Hashtable<String, Object>> rows, String primaryKey, String pagePath) throws IOException, ClassNotFoundException {
         for (Index index : indices) {
             Object grid = deserializeObject(index.getPath());
-            for (Hashtable<String, Object> colNameValue : rows) {
+            for (Hashtable<String, Object> row : rows) {
+                if (row.get("id").equals("73-3452")) {
+                    System.out.println();
+                }
                 String[] colNames = index.getColumnNames();
                 Hashtable<String, Object> keyHashTable = new Hashtable<>();
                 Hashtable<String, Range> keySearchHashTable = new Hashtable<>();
                 //keyHashTable is the key to use to search inside the bucket
                 for (String colName : colNames) {
-                    if (colNameValue.containsKey(colName)) {
-                        keyHashTable.put(colName, colNameValue.get(colName));
-                        Comparable object = (Comparable) colNameValue.get(colName);
+                    if (row.containsKey(colName)) {
+                        keyHashTable.put(colName, row.get(colName));
+                        Comparable object = (Comparable) row.get(colName);
                         keySearchHashTable.put(colName, new Range(object, object));
                     }
                 }
@@ -290,7 +296,6 @@ public class DBApp implements DBAppInterface {
                             break;
                         }
                     }
-
                     Hashtable<Hashtable<String, Object>, Vector<RowReference>> bucketHashTable;
                     Vector<RowReference> newVector;
                     if (foundBucket) {
@@ -308,7 +313,7 @@ public class DBApp implements DBAppInterface {
                         newVector = new Vector<>();
                     }
 
-                    newVector.add(new RowReference(pagePath, colNameValue.get(primaryKey)));
+                    newVector.add(new RowReference(pagePath, row.get(primaryKey)));
                     bucketHashTable.put(keyHashTable, newVector);
                     bucket.setNumOfRecords(bucket.getNumOfRecords() + 1);
 
@@ -530,7 +535,7 @@ public class DBApp implements DBAppInterface {
         Vector<Vector<Bucket>> totalBuckets = new Vector<>();
         int level = index.getColumnsCount() - colNameValue.size();
         for (Object subGrid : subGrids)
-            getResultBuckets(subGrid, level , totalBuckets);
+            getResultBuckets(subGrid, level, totalBuckets);
         return totalBuckets;
     }
 
@@ -572,7 +577,7 @@ public class DBApp implements DBAppInterface {
 
         updateMetaDataFile(tableName, columnNames);
 
-        table.getIndices().add(new Index(indexPath, columnNames, (Hashtable<String, Object>) tableInfo[1], (Hashtable<String, Object>) tableInfo[2]));
+        table.getIndices().add(newIndex);
         table.setIndexCounter(table.getIndexCounter() + 1);
 
         int[] dimensions = new int[columnNames.length];
@@ -592,10 +597,10 @@ public class DBApp implements DBAppInterface {
         serializeObject(table, "src/main/resources/data/Tables/" + tableName + ".ser");
     }
 
-    private void initializeGridCells(Object grid, int curLevel){
+    private void initializeGridCells(Object grid, int curLevel) {
         if (curLevel == 1) {
-          for(int i=0;i<10;i++)
-              ((Object[]) grid)[i]=new Vector<Bucket>();
+            for (int i = 0; i < 10; i++)
+                ((Object[]) grid)[i] = new Vector<Bucket>();
             return;
         }
         for (int i = 0; i < 10; i++)
@@ -864,7 +869,7 @@ public class DBApp implements DBAppInterface {
                     break;
                 curMatch++;
             }
-            if (curMatch > maximumMatch) {
+            if (curMatch >= maximumMatch) {
                 maximumMatch = curMatch;
                 maximumMatchIndex = i;
             }
@@ -903,8 +908,9 @@ public class DBApp implements DBAppInterface {
                 Hashtable<Hashtable<String, Object>, Vector<RowReference>> references = (Hashtable<Hashtable<String, Object>, Vector<RowReference>>) deserializeObject(bucket.getPath());
                 for (Hashtable<String, Object> compressedRow : references.keySet()) {
                     boolean searchInsidePage = true;
-                    for (String column : columnNameValue.keySet())
-                        searchInsidePage &= compressedRow.contains(column) && compare(columnNameValue.get(column), compressedRow.get(column)) == 0;
+                    for (String column : columnNameValue.keySet()) {
+                        searchInsidePage &= compressedRow.containsKey(column) && compare(columnNameValue.get(column), compressedRow.get(column)) == 0;
+                    }
                     if (searchInsidePage) {
                         Vector<RowReference> rowReferences = references.get(compressedRow);
                         for (RowReference rowReference : rowReferences) {
@@ -932,17 +938,17 @@ public class DBApp implements DBAppInterface {
             Object grid = deserializeObject(index.getPath());
             Hashtable<String, Range> colNameRange = getColNameRange(index, columnNameValue);
             Vector<Vector<Bucket>> cells = searchInsideIndex(index, grid, colNameRange);
-            Iterator<Vector<Bucket>> cellsIterator = cells.iterator();
-            while (cellsIterator.hasNext()) {
-                Vector<Bucket> cell = cellsIterator.next();
+            for (Vector<Bucket> cell : cells) {
                 Iterator<Bucket> bucketIterator = cell.iterator();
                 while (bucketIterator.hasNext()) {
                     Bucket bucket = bucketIterator.next();
                     Hashtable<Hashtable<String, Object>, Vector<RowReference>> references = (Hashtable<Hashtable<String, Object>, Vector<RowReference>>) deserializeObject(bucket.getPath());
                     Iterator<Map.Entry<Hashtable<String, Object>, Vector<RowReference>>> iterator = references.entrySet().iterator();
+                    int newSize=0;
                     while (iterator.hasNext()) {
                         Vector<RowReference> rowReferences = iterator.next().getValue();
                         rowReferences.removeIf(rowReference -> deletedRows.contains(rowReference.getClusteringValue()));
+                        newSize+=rowReferences.size();
                         if (rowReferences.size() == 0)
                             iterator.remove();
                     }
@@ -950,6 +956,7 @@ public class DBApp implements DBAppInterface {
                         bucketIterator.remove();
                     else {
                         delete(bucket.getPath());
+                        bucket.setNumOfRecords(newSize);
                         serializeObject(references, bucket.getPath());
                     }
                 }
@@ -1016,39 +1023,38 @@ public class DBApp implements DBAppInterface {
         Stack<Vector<Hashtable<String, Object>>> termsSets = new Stack<>();
 
         Vector<Pair> indicesWithTerms = isIndexPreferable(sqlTerms, arrayOperators, targetTable);
-        HashMap<String,Vector<SQLTerm>> hashMapOfTerms = hashingTerms(sqlTerms);
+        HashMap<String, Vector<SQLTerm>> hashMapOfTerms = hashingTerms(sqlTerms);
 
-        if (indicesWithTerms != null || indicesWithTerms.size() > 1) {
-            for (Pair pair:indicesWithTerms){
+        if (indicesWithTerms != null) {
+            for (Pair pair : indicesWithTerms) {
                 Index index = pair.getIndex();
                 Vector<SQLTerm> indexTerms = pair.getTerms();
-                if (index != null){
-                    Hashtable<String,Range> termsRanges = new Hashtable<>();
-                    for(SQLTerm indexTerm:indexTerms){
+                if (index != null) {
+                    Hashtable<String, Range> termsRanges = new Hashtable<>();
+                    for (SQLTerm indexTerm : indexTerms) {
                         Vector<SQLTerm> terms = hashMapOfTerms.get(indexTerm.get_strColumnName());
-                        Range range = new Range((Comparable) ((Hashtable<String,Object>)tableInfo[1]).get(indexTerm.get_strColumnName()),(Comparable) ((Hashtable<String,Object>)tableInfo[2]).get(indexTerm.get_strColumnName()));
-                        for (SQLTerm term:terms) {
+                        Range range = new Range((Comparable) ((Hashtable<String, Object>) tableInfo[1]).get(indexTerm.get_strColumnName()), (Comparable) ((Hashtable<String, Object>) tableInfo[2]).get(indexTerm.get_strColumnName()));
+                        for (SQLTerm term : terms) {
                             range = updateColumnRange(term, tableInfo, range);
                             if (range == null)
                                 return new Vector<>().iterator();
                         }
-                        termsRanges.put(indexTerm.get_strColumnName(),range);
+                        termsRanges.put(indexTerm.get_strColumnName(), range);
                     }
                     Vector<Bucket> buckets = new Vector<>();
                     Object grid = deserializeObject(index.getPath());
-                    Vector<Vector<Bucket>> cells =searchInsideIndex(index,grid,termsRanges);
-                    for (Vector<Bucket> vector:cells)
+                    Vector<Vector<Bucket>> cells = searchInsideIndex(index, grid, termsRanges);
+                    for (Vector<Bucket> vector : cells)
                         buckets.addAll(vector);
                     Vector<SQLTerm> terms = new Vector<>();
-                    for(SQLTerm indexTerm:indexTerms)
+                    for (SQLTerm indexTerm : indexTerms)
                         terms.addAll(hashMapOfTerms.get(indexTerm.get_strColumnName()));
                     Vector<Hashtable<String, Object>> vector = getValidRowsInBucket(terms, buckets, clusteringColumnName);
                     termsSets.add(vector);
-                }
-                else {
-                    for (SQLTerm nonIndexedTerm:pair.getTerms()){
+                } else {
+                    for (SQLTerm nonIndexedTerm : pair.getTerms()) {
                         Vector<SQLTerm> terms = hashMapOfTerms.get(nonIndexedTerm.get_strColumnName());
-                        for (SQLTerm term:terms) {
+                        for (SQLTerm term : terms) {
                             Vector<Hashtable<String, Object>> vector = isValidTerm(term, tablePages, clusteringColumnName);
                             termsSets.add(vector);
                         }
@@ -1100,38 +1106,38 @@ public class DBApp implements DBAppInterface {
     }
 
     private Vector<Hashtable<String, Object>> getValidRowsInBucket(Vector<SQLTerm> terms, Vector<Bucket> buckets, String clusteringColumnName) throws IOException, ClassNotFoundException {
-        Hashtable<String,Vector<Object>> rows = new Hashtable<>();
-        for(Bucket bucket:buckets){
-            Hashtable<Hashtable<String,Object>,Vector<RowReference>> bucketObject = (Hashtable<Hashtable<String, Object>, Vector<RowReference>>) deserializeObject(bucket.getPath());
-            for (Hashtable<String,Object> key:bucketObject.keySet()) {
+        Hashtable<String, Vector<Object>> rows = new Hashtable<>();
+        for (Bucket bucket : buckets) {
+            Hashtable<Hashtable<String, Object>, Vector<RowReference>> bucketObject = (Hashtable<Hashtable<String, Object>, Vector<RowReference>>) deserializeObject(bucket.getPath());
+            for (Hashtable<String, Object> key : bucketObject.keySet()) {
                 boolean valid = true;
                 for (SQLTerm term : terms)
-                    if (!booleanValueOfTerm(key,term)){
+                    if (!booleanValueOfTerm(key, term)) {
                         valid = false;
                         break;
                     }
-                if (valid){
+                if (valid) {
                     Vector<RowReference> rowReferences = bucketObject.get(key);
-                    for (RowReference rowReference: rowReferences) {
+                    for (RowReference rowReference : rowReferences) {
                         Vector<Object> clusteringValues = new Vector<>();
                         if (rows.containsKey(rowReference.getPagePath()))
                             clusteringValues = rows.get(rowReference.getPagePath());
                         clusteringValues.add(rowReference.getClusteringValue());
-                        rows.put(rowReference.getPagePath(),clusteringValues);
+                        rows.put(rowReference.getPagePath(), clusteringValues);
                     }
                 }
             }
 
         }
-        return getCorrespondingRows(rows,clusteringColumnName);
+        return getCorrespondingRows(rows, clusteringColumnName);
     }
 
     private Vector<Hashtable<String, Object>> getCorrespondingRows(Hashtable<String, Vector<Object>> gridRecords, String clusteringColumnName) throws IOException, ClassNotFoundException {
-        Vector<Hashtable<String,Object>> result = new Vector<>();
-        for (String pagePath:gridRecords.keySet()){
+        Vector<Hashtable<String, Object>> result = new Vector<>();
+        for (String pagePath : gridRecords.keySet()) {
             Vector<Hashtable<String, Object>> currentPage = (Vector<Hashtable<String, Object>>) deserializeObject(pagePath);
-            for (Object value:gridRecords.get(pagePath)){
-                int index = searchInsidePage(currentPage,value,clusteringColumnName);
+            for (Object value : gridRecords.get(pagePath)) {
+                int index = searchInsidePage(currentPage, value, clusteringColumnName);
                 result.add(currentPage.get(index));
             }
         }
@@ -1140,9 +1146,9 @@ public class DBApp implements DBAppInterface {
 
     private HashMap<String, Vector<SQLTerm>> hashingTerms(SQLTerm[] sqlTerms) {
         HashMap<String, Vector<SQLTerm>> hashMap = new HashMap<>();
-        for (SQLTerm term:sqlTerms)
+        for (SQLTerm term : sqlTerms)
             hashMap.put(term.get_strColumnName(), new Vector<>());
-        for (SQLTerm term:sqlTerms)
+        for (SQLTerm term : sqlTerms)
             hashMap.get(term.get_strColumnName()).add(term);
         return hashMap;
     }
@@ -1180,6 +1186,7 @@ public class DBApp implements DBAppInterface {
         Vector<Index> tableIndices = targetTable.getIndices();
         Vector<Pair> termsOfIndices = new Vector<>();
         Collections.sort(tableIndices, Comparator.comparingInt(Index::getColumnsCount));
+        HashSet<String> indexedColumns = new HashSet<>();
         for (Index index : tableIndices) {
             Vector<SQLTerm> validTerms = new Vector<>();
             for (String dimensionName : index.getColumnNames()) {
@@ -1188,6 +1195,7 @@ public class DBApp implements DBAppInterface {
                         && !termsVisited[termsColumnNames.indexOf(dimensionName)]) {
                     validTerms.add(sqlTerms[termsColumnNames.indexOf(dimensionName)]);
                     termsVisited[termsColumnNames.indexOf(dimensionName)] = true;
+                    indexedColumns.add(dimensionName);
                     continue;
                 }
                 Pair p = new Pair(index, validTerms);
@@ -1197,8 +1205,9 @@ public class DBApp implements DBAppInterface {
         }
         Pair nonIndexedTerms = new Pair(null, new Vector<>());
         for (int i = 0; i < termsVisited.length; i++)
-            if (!termsVisited[i])
+            if (!termsVisited[i] && !indexedColumns.contains(sqlTerms[i].get_strColumnName()))
                 nonIndexedTerms.add(sqlTerms[i]);
+
         termsOfIndices.add(nonIndexedTerms);
         if (termsOfIndices.size() == 1 && termsOfIndices.get(0).getIndex() == null)
             return null;
@@ -1580,6 +1589,11 @@ public class DBApp implements DBAppInterface {
     }
 
     public static void main(String[] args) throws DBAppException, IOException, ClassNotFoundException, ParseException {
-
+        DBApp dbApp = new DBApp();
+//        dbApp.parseSQL(new StringBuffer("create index n on students (gpa)"));
+        dbApp.parseSQL(new StringBuffer("delete from students where gpa = 4.98"));
+        Table t = (Table) dbApp.deserializeObject("src/main/resources/data/Tables/students.ser");
+        Vector<Bucket>[] grid = (Vector<Bucket>[]) dbApp.deserializeObject("src/main/resources/data/Tables/students/Indices/index0.ser");
+        System.out.println();
     }
 }

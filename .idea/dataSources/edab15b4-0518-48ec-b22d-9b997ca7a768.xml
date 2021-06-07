@@ -207,7 +207,7 @@
 149575571|||0|select|G
 1787153412|||0|select|G
 1803153469|||0|select|G</Grants>
-      <IntrospectionTimestamp>2021-05-30.23:19:18.700</IntrospectionTimestamp>
+      <IntrospectionTimestamp>2021-06-07.00:54:36.090</IntrospectionTimestamp>
       <Current>1</Current>
     </schema>
     <schema id="38" parent="2" name="guest">
@@ -335,9 +335,9 @@
       <ModifiedTimestamp>2020-09-23.18:37:03.907</ModifiedTimestamp>
     </table>
     <table id="62" parent="37" name="students">
-      <ObjectId>327672215</ObjectId>
-      <CreatedTimestamp>2021-05-03.02:04:05.430</CreatedTimestamp>
-      <ModifiedTimestamp>2021-05-03.02:17:27.933</ModifiedTimestamp>
+      <ObjectId>951674438</ObjectId>
+      <CreatedTimestamp>2021-06-07.00:53:59.213</CreatedTimestamp>
+      <ModifiedTimestamp>2021-06-07.00:53:59.213</ModifiedTimestamp>
     </table>
     <view id="63" parent="37" name="spt_values">
       <ObjectId>1787153412</ObjectId>
@@ -610,52 +610,64 @@
     </column>
     <column id="116" parent="62" name="id">
       <Position>1</Position>
-      <DataType>varchar(10 char)|0s</DataType>
+      <DataType>varchar(15 char)|0s</DataType>
+      <NotNull>1</NotNull>
     </column>
     <column id="117" parent="62" name="first_name">
       <Position>2</Position>
-      <DataType>varchar(max)|0s</DataType>
+      <DataType>varchar(15 char)|0s</DataType>
     </column>
     <column id="118" parent="62" name="last_name">
       <Position>3</Position>
-      <DataType>varchar(max)|0s</DataType>
+      <DataType>varchar(15 char)|0s</DataType>
     </column>
     <column id="119" parent="62" name="dob">
       <Position>4</Position>
-      <DataType>datetime|0s</DataType>
+      <DataType>date|0s</DataType>
     </column>
     <column id="120" parent="62" name="gpa">
       <Position>5</Position>
-      <DataType>float|0s</DataType>
+      <DataType>decimal(3,2)|0s</DataType>
     </column>
-    <index id="121" parent="62" name="students_id_uindex">
-      <Position>2</Position>
+    <index id="121" parent="62" name="PK__students__3213E83FB0188731">
+      <Position>1</Position>
+      <NameSurrogate>1</NameSurrogate>
       <ColNames>id</ColNames>
+      <Clustering>1</Clustering>
       <Unique>1</Unique>
     </index>
-    <column id="122" parent="63" name="name">
+    <key id="122" parent="62" name="PK__students__3213E83FB0188731">
+      <ObjectId>967674495</ObjectId>
+      <NameSurrogate>1</NameSurrogate>
+      <CreatedTimestamp>2021-06-07.00:53:59.223</CreatedTimestamp>
+      <ModifiedTimestamp>2021-06-07.00:53:59.223</ModifiedTimestamp>
+      <ColNames>id</ColNames>
+      <UnderlyingIndexName>PK__students__3213E83FB0188731</UnderlyingIndexName>
+      <Primary>1</Primary>
+    </key>
+    <column id="123" parent="63" name="name">
       <Position>1</Position>
       <DataType>nvarchar(35 char)|0s</DataType>
     </column>
-    <column id="123" parent="63" name="number">
+    <column id="124" parent="63" name="number">
       <Position>2</Position>
       <DataType>int|0s</DataType>
       <NotNull>1</NotNull>
     </column>
-    <column id="124" parent="63" name="type">
+    <column id="125" parent="63" name="type">
       <Position>3</Position>
       <DataType>nchar(3 char)|0s</DataType>
       <NotNull>1</NotNull>
     </column>
-    <column id="125" parent="63" name="low">
+    <column id="126" parent="63" name="low">
       <Position>4</Position>
       <DataType>int|0s</DataType>
     </column>
-    <column id="126" parent="63" name="high">
+    <column id="127" parent="63" name="high">
       <Position>5</Position>
       <DataType>int|0s</DataType>
     </column>
-    <column id="127" parent="63" name="status">
+    <column id="128" parent="63" name="status">
       <Position>6</Position>
       <DataType>int|0s</DataType>
     </column>

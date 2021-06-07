@@ -7,7 +7,6 @@ import java.util.Hashtable;
 import java.util.Iterator;
 
 
-
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class Milestone2Tests {
 
@@ -118,33 +117,33 @@ public class Milestone2Tests {
     }
 
     @Test
-    public void testSelectEmptyStudents() throws Exception{
+    public void testSelectEmptyStudents() throws Exception {
         // Should return an empty iterator with no errors thrown
 
         SQLTerm[] arrSQLTerms;
         arrSQLTerms = new SQLTerm[2];
         arrSQLTerms[0] = new SQLTerm();
         arrSQLTerms[0]._strTableName = "students";
-        arrSQLTerms[0]._strColumnName= "first_name";
+        arrSQLTerms[0]._strColumnName = "first_name";
         arrSQLTerms[0]._strOperator = "=";
-        arrSQLTerms[0]._objValue ="John";
+        arrSQLTerms[0]._objValue = "John";
 
         arrSQLTerms[1] = new SQLTerm();
         arrSQLTerms[1]._strTableName = "students";
-        arrSQLTerms[1]._strColumnName= "gpa";
+        arrSQLTerms[1]._strColumnName = "gpa";
         arrSQLTerms[1]._strOperator = "=";
         arrSQLTerms[1]._objValue = new Double(0.7);
 
-        String[]strarrOperators = new String[1];
+        String[] strarrOperators = new String[1];
         strarrOperators[0] = "AND";
 
         DBApp dbApp = new DBApp();
         dbApp.init();
-        Iterator resultSet = dbApp.selectFromTable(arrSQLTerms , strarrOperators);
+        Iterator resultSet = dbApp.selectFromTable(arrSQLTerms, strarrOperators);
     }
 
     @Test
-    public void testSelectActualStudentOR() throws Exception{
+    public void testSelectActualStudentOR() throws Exception {
         // Should return a non-empty iterator with no errors thrown
 
         BufferedReader studentsTable = new BufferedReader(new FileReader("src/main/resources/students_table.csv"));
@@ -183,26 +182,26 @@ public class Milestone2Tests {
         arrSQLTerms = new SQLTerm[2];
         arrSQLTerms[0] = new SQLTerm();
         arrSQLTerms[0]._strTableName = "students";
-        arrSQLTerms[0]._strColumnName= "first_name";
+        arrSQLTerms[0]._strColumnName = "first_name";
         arrSQLTerms[0]._strOperator = "=";
-        arrSQLTerms[0]._objValue =row.get("first_name");
+        arrSQLTerms[0]._objValue = row.get("first_name");
 
         arrSQLTerms[1] = new SQLTerm();
         arrSQLTerms[1]._strTableName = "students";
-        arrSQLTerms[1]._strColumnName= "gpa";
+        arrSQLTerms[1]._strColumnName = "gpa";
         arrSQLTerms[1]._strOperator = "<=";
         arrSQLTerms[1]._objValue = row.get("gpa");
 
-        String[]strarrOperators = new String[1];
+        String[] strarrOperators = new String[1];
         strarrOperators[0] = "OR";
 
         DBApp dbApp = new DBApp();
         dbApp.init();
-        Iterator resultSet = dbApp.selectFromTable(arrSQLTerms , strarrOperators);
+        Iterator resultSet = dbApp.selectFromTable(arrSQLTerms, strarrOperators);
     }
 
     @Test
-    public void testSelectActualStudentAND() throws Exception{
+    public void testSelectActualStudentAND() throws Exception {
         // Should return a non-empty iterator with no errors thrown
 
         BufferedReader studentsTable = new BufferedReader(new FileReader("src/main/resources/students_table.csv"));
@@ -241,22 +240,22 @@ public class Milestone2Tests {
         arrSQLTerms = new SQLTerm[2];
         arrSQLTerms[0] = new SQLTerm();
         arrSQLTerms[0]._strTableName = "students";
-        arrSQLTerms[0]._strColumnName= "first_name";
+        arrSQLTerms[0]._strColumnName = "first_name";
         arrSQLTerms[0]._strOperator = "=";
-        arrSQLTerms[0]._objValue =row.get("first_name");
+        arrSQLTerms[0]._objValue = row.get("first_name");
 
         arrSQLTerms[1] = new SQLTerm();
         arrSQLTerms[1]._strTableName = "students";
-        arrSQLTerms[1]._strColumnName= "gpa";
+        arrSQLTerms[1]._strColumnName = "gpa";
         arrSQLTerms[1]._strOperator = "=";
         arrSQLTerms[1]._objValue = row.get("gpa");
 
-        String[]strarrOperators = new String[1];
+        String[] strarrOperators = new String[1];
         strarrOperators[0] = "AND";
 // select * from Student where name = “John Noor” or gpa = 1.5;
         DBApp dbApp = new DBApp();
         dbApp.init();
-        Iterator resultSet = dbApp.selectFromTable(arrSQLTerms , strarrOperators);
+        Iterator resultSet = dbApp.selectFromTable(arrSQLTerms, strarrOperators);
     }
 
 
@@ -388,7 +387,6 @@ public class Milestone2Tests {
             double gpa = Double.parseDouble(fields[4].trim());
 
             row.put("gpa", gpa);
-
             dbApp.insertIntoTable("students", row);
             row.clear();
             if (limit != -1) {

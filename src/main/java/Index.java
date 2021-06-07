@@ -101,12 +101,22 @@ public class Index implements Serializable {
             r.setMaxVal(((String) r.getMaxVal()).toLowerCase());
         }
         for (int i = 0; i < 10; i++)
-            if (isInRange(columnRanges[column][i], r))
-                ans.add(i);
+            if (i == 9) {
+                if (isInRangeIncInc(columnRanges[column][i], r)) {
+                    ans.add(i);
+                }
+            } else {
+                if (isInRangeIncExc(columnRanges[column][i], r))
+                    ans.add(i);
+            }
         return ans;
     }
 
-    private boolean isInRange(Range r1, Range r2) {
+    private boolean isInRangeIncExc(Range r1, Range r2) {
+        return !(r1.getMaxVal().compareTo(r2.getMinVal()) <= 0 || r1.getMinVal().compareTo(r2.getMaxVal()) > 0);
+    }
+
+    private boolean isInRangeIncInc(Range r1, Range r2) {
         return !(r1.getMaxVal().compareTo(r2.getMinVal()) < 0 || r1.getMinVal().compareTo(r2.getMaxVal()) > 0);
     }
 
