@@ -45,7 +45,7 @@ public class ParserListener extends MiniSQLParserBaseListener {
             for (int i = 0; i < terminals.size(); i += 4) {
                 SQLTerm term = new SQLTerm();
                 term._strColumnName = terminals.get(i);
-                term._strOperator = terminals.get(i + 1);
+                term._strOperator = terminals.get(i + 1).equals("<>") ? "!=" : terminals.get(i + 1);
                 term._objValue = castString(colDataTypes.get(term._strColumnName), terminals.get(i + 2));
                 term._strTableName = tableName;
                 sqlTerms[i / 4] = term;

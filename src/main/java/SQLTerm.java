@@ -37,7 +37,7 @@ public class SQLTerm implements Comparable<Object> {
         else if (this.get_objValue() instanceof java.lang.Double)
             return ((Double) this.get_objValue()).compareTo((Double) o);
         else if (this.get_objValue() instanceof java.lang.String)
-            return ((String) this.get_objValue()).compareTo((String) o);
+            return ((String) this.get_objValue()).toLowerCase().compareTo(((String) o).toLowerCase());
         return 0;
 
     }

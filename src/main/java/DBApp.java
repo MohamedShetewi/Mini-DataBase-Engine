@@ -519,8 +519,8 @@ public class DBApp implements DBAppInterface {
             ex.printStackTrace();
         }
         int[] arr = new int[2];
-        arr[0] = Integer.parseInt(prop.getProperty("MaximumRowsCountinPage"));
-        arr[1] = Integer.parseInt(prop.getProperty("MaximumKeysCountinIndexBucket"));
+        arr[0] = Integer.parseInt(prop.getProperty("MaximumRowsCountingPage"));
+        arr[1] = Integer.parseInt(prop.getProperty("MaximumKeysCountingIndexBucket"));
         return arr;
     }
 
@@ -1179,23 +1179,32 @@ public class DBApp implements DBAppInterface {
         for (String operator : arrayOperators)
             if (!operator.equals("AND"))
                 return null;
+        for (SQLTerm term:sqlTerms)
+            if (term._strOperator.equals("!="))
+                return null;
+
         Vector<String> termsColumnNames = new Vector<>();
         boolean[] termsVisited = new boolean[sqlTerms.length];
         for (SQLTerm term : sqlTerms)
             termsColumnNames.add(term.get_strColumnName());
         Vector<Index> tableIndices = targetTable.getIndices();
         Vector<Pair> termsOfIndices = new Vector<>();
-        Collections.sort(tableIndices, Comparator.comparingInt(Index::getColumnsCount));
+        Collections.sort(tableIndices, (a, b) -> b.getColumnsCount() - a.getColumnsCount());
         HashSet<String> indexedColumns = new HashSet<>();
         for (Index index : tableIndices) {
             Vector<SQLTerm> validTerms = new Vector<>();
-            for (String dimensionName : index.getColumnNames()) {
+            String[] columnNames = index.getColumnNames();
+            for (int i=0;i<columnNames.length;i++) {
+                String dimensionName = columnNames[i];
                 if (termsColumnNames.contains(dimensionName)
-                        && !sqlTerms[termsColumnNames.indexOf(dimensionName)].get_strOperator().equals("!=")
                         && !termsVisited[termsColumnNames.indexOf(dimensionName)]) {
                     validTerms.add(sqlTerms[termsColumnNames.indexOf(dimensionName)]);
                     termsVisited[termsColumnNames.indexOf(dimensionName)] = true;
                     indexedColumns.add(dimensionName);
+                    if (i == index.getColumnNames().length -1){
+                        Pair p = new Pair(index, validTerms);
+                        termsOfIndices.add(p);
+                    }
                     continue;
                 }
                 Pair p = new Pair(index, validTerms);
@@ -1463,7 +1472,7 @@ public class DBApp implements DBAppInterface {
         checkColumnsCompatibility(columnNameValue, colDataTypes);
         checkValuesRanges(columnNameValue, colDataTypes, colMin, colMax);
         if (columnNameValue.get(clusteringCol) != null) {
-            throw new DBAppException("Cannot update clustering cloumn.");
+            throw new DBAppException("Cannot update clustering column.");
         }
         return new Object[]{clusteringCol, clusteringObject};
     }
@@ -1574,9 +1583,9 @@ public class DBApp implements DBAppInterface {
         return new Object[]{colDataTypes, colMin, colMax, clusteringType, clusteringCol};
     }
 
-    public Iterator parseSQL(StringBuffer strbufSQL) throws DBAppException {
+    public Iterator parseSQL(StringBuffer strBufSQL) throws DBAppException {
 
-        SQLiteLexer lexer = new SQLiteLexer(CharStreams.fromString(strbufSQL.toString()));
+        SQLiteLexer lexer = new SQLiteLexer(CharStreams.fromString(strBufSQL.toString()));
         MiniSQLParser parser = new MiniSQLParser(new CommonTokenStream(lexer));
         ParserErrorHandler errorHandler = new ParserErrorHandler();
         parser.setErrorHandler(errorHandler);
@@ -1589,11 +1598,6 @@ public class DBApp implements DBAppInterface {
     }
 
     public static void main(String[] args) throws DBAppException, IOException, ClassNotFoundException, ParseException {
-        DBApp dbApp = new DBApp();
-//        dbApp.parseSQL(new StringBuffer("create index n on students (gpa)"));
-        dbApp.parseSQL(new StringBuffer("delete from students where gpa = 4.98"));
-        Table t = (Table) dbApp.deserializeObject("src/main/resources/data/Tables/students.ser");
-        Vector<Bucket>[] grid = (Vector<Bucket>[]) dbApp.deserializeObject("src/main/resources/data/Tables/students/Indices/index0.ser");
-        System.out.println();
+
     }
 }
