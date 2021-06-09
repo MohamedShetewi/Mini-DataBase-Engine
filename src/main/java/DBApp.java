@@ -266,9 +266,6 @@ public class DBApp implements DBAppInterface {
         for (Index index : indices) {
             Object grid = deserializeObject(index.getPath());
             for (Hashtable<String, Object> row : rows) {
-                if (row.get("id").equals("73-3452")) {
-                    System.out.println();
-                }
                 String[] colNames = index.getColumnNames();
                 Hashtable<String, Object> keyHashTable = new Hashtable<>();
                 Hashtable<String, Range> keySearchHashTable = new Hashtable<>();
@@ -519,8 +516,8 @@ public class DBApp implements DBAppInterface {
             ex.printStackTrace();
         }
         int[] arr = new int[2];
-        arr[0] = Integer.parseInt(prop.getProperty("MaximumRowsCountingPage"));
-        arr[1] = Integer.parseInt(prop.getProperty("MaximumKeysCountingIndexBucket"));
+        arr[0] = Integer.parseInt(prop.getProperty("MaximumRowsCountinPage"));
+        arr[1] = Integer.parseInt(prop.getProperty("MaximumKeysCountinIndexBucket"));
         return arr;
     }
 
@@ -1027,6 +1024,8 @@ public class DBApp implements DBAppInterface {
 
         if (indicesWithTerms != null) {
             for (Pair pair : indicesWithTerms) {
+                if(pair.terms.isEmpty())
+                    continue;
                 Index index = pair.getIndex();
                 Vector<SQLTerm> indexTerms = pair.getTerms();
                 if (index != null) {
@@ -1584,7 +1583,6 @@ public class DBApp implements DBAppInterface {
     }
 
     public Iterator parseSQL(StringBuffer strBufSQL) throws DBAppException {
-
         SQLiteLexer lexer = new SQLiteLexer(CharStreams.fromString(strBufSQL.toString()));
         MiniSQLParser parser = new MiniSQLParser(new CommonTokenStream(lexer));
         ParserErrorHandler errorHandler = new ParserErrorHandler();
@@ -1599,5 +1597,5 @@ public class DBApp implements DBAppInterface {
 
     public static void main(String[] args) throws DBAppException, IOException, ClassNotFoundException, ParseException {
 
-    }
+   }
 }

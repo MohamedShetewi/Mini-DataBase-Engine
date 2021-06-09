@@ -31,7 +31,7 @@ public class Index implements Serializable {
 
     private Range[] buildRanges(Object minVal, Object maxVal) {
         if (minVal instanceof String)
-            return buildStringRanges();
+            return buildStringRanges((String) minVal);
         return buildNumbersRanges(minVal, maxVal);
     }
 
@@ -46,6 +46,7 @@ public class Index implements Serializable {
 //        Index index = new Index("", new String[]{"employer", "ID"}, min, max);
 //        System.out.println(index.getPosition(new Date(new Date().getTime() + 2900), 1));
 //        System.out.println(Arrays.toString(index.columnRanges[0]) + "\n" + Arrays.toString(index.columnRanges[1]));
+
     }
 
     private Range[] buildNumbersRanges(Object minVal, Object maxVal) {
@@ -79,26 +80,34 @@ public class Index implements Serializable {
         return (((Date) maxVal).getTime() - ((Date) minVal).getTime() + 9) / 10;
     }
 
-    private static Range[] buildStringRanges() {
+    private static Range[] buildStringRanges(String minValue) {
         Range[] ranges = new Range[10];
         for (int i = 0; i < 10; i++) {
-            if (i == 0) {
-                ranges[i] = new Range("a", "c");
+            if (Character.isAlphabetic(minValue.charAt(0))) {
+                if (i == 0) {
+                    ranges[i] = new Range('a', 'd');
+                } else {
+                    char min = (char) ranges[i - 1].getMaxVal();
+                    char max = (char) (min + (i < 6 ? 3 : i < 9 ? 2 : 1));
+                    ranges[i] = new Range(min, max);
+                }
             } else {
-                char previous = ((String) ranges[i - 1].getMaxVal()).charAt(0);
-                String min = (char) (previous + 1) + "";
-                String max = (char) (previous + (i < 6 ? 3 : 2)) + "";
-                ranges[i] = new Range(min, max);
+                ranges[i] = i < 9 ? new Range((char) (i + '0'), (char) (i + 1 + '0')) : new Range((char) (i + '0'), (char) (i + '0'));
             }
         }
         return ranges;
     }
+
 
     public Vector<Integer> getPosition(Range r, int column) {
         Vector<Integer> ans = new Vector<>();
         if (r.getMinVal() instanceof String) {
             r.setMinVal(((String) r.getMinVal()).toLowerCase());
             r.setMaxVal(((String) r.getMaxVal()).toLowerCase());
+            String min= (String) r.getMinVal();
+            String max=(String) r.getMaxVal();
+            r.setMinVal(min.charAt(0));
+            r.setMaxVal(max.charAt(0));
         }
         for (int i = 0; i < 10; i++)
             if (i == 9) {
