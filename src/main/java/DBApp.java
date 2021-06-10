@@ -1154,9 +1154,9 @@ public class DBApp implements DBAppInterface {
 
         switch (operator) {
 
-            case "XOR":
-                return 3;
             case "AND":
+                return 3;
+            case "XOR":
                 return 2;
             case "OR":
                 return 1;
