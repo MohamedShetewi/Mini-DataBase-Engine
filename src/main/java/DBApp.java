@@ -531,8 +531,10 @@ public class DBApp implements DBAppInterface {
         getSubGrids(grid, indices, 0, subGrids);
         Vector<Vector<Bucket>> totalBuckets = new Vector<>();
         int level = index.getColumnsCount() - colNameValue.size();
+
         for (Object subGrid : subGrids)
             getResultBuckets(subGrid, level, totalBuckets);
+
         return totalBuckets;
     }
 
@@ -1075,39 +1077,93 @@ public class DBApp implements DBAppInterface {
             return queryResult.iterator();
         }
 
+        Vector<Vector<Hashtable<String, Object>>> operands = new Vector<>();
 
-        for (int i = sqlTerms.length - 1; i >= 0; i--) {
+        for (int i = 0; i < sqlTerms.length; i++) {
             Vector<Hashtable<String, Object>> vector = isValidTerm(sqlTerms[i], tablePages, clusteringColumnName);
-            termsSets.add(vector);
+            operands.add(vector);
         }
 
-        for (String arrayOperator : arrayOperators) {
-            Vector<Hashtable<String, Object>> a = termsSets.pop();
-            Vector<Hashtable<String, Object>> b = termsSets.pop();
+        return selectPrecedence(operands, arrayOperators, clusteringColumnName).iterator();
+    }
 
-            switch (arrayOperator) {
-                case "AND":
-                    Vector<Hashtable<String, Object>> aIntersectB = rowsIntersection(a, b, clusteringColumnName);
-                    termsSets.push(aIntersectB);
-                    break;
-                case "OR":
-                    Vector<Hashtable<String, Object>> aUnionB = rowsUnion(a, b, clusteringColumnName);
-                    termsSets.push(aUnionB);
-                    break;
-                case "XOR":
-                    Vector<Hashtable<String, Object>> aDiffB = rowsDifference(a, b, clusteringColumnName);
-                    Vector<Hashtable<String, Object>> bDiffA = rowsDifference(b, a, clusteringColumnName);
-                    Vector<Hashtable<String, Object>> aXorB = rowsUnion(aDiffB, bDiffA, clusteringColumnName);
-                    termsSets.push(aXorB);
-                    break;
+
+    private Vector<Hashtable<String, Object>> selectPrecedence(Vector<Vector<Hashtable<String, Object>>> operands, String[] operators, String clusteringColumnName) {
+
+        Stack<String> operatorsForPostfix = new Stack<>();
+        Vector<Object> postfixExp = new Vector<>();
+
+        for (int i = 0; i < operands.size(); i++) {
+            if (i == 0)
+                postfixExp.add(operands.get(i));
+            else {
+
+                if (operatorsForPostfix.isEmpty()) {
+                    operatorsForPostfix.push(operators[i - 1]);
+                } else if (getOperatorPriority(operatorsForPostfix.peek()) < getOperatorPriority(operators[i - 1])) {
+                    operatorsForPostfix.push(operators[i - 1]);
+                } else {
+                    while (!operatorsForPostfix.isEmpty() &&
+                            getOperatorPriority(operatorsForPostfix.peek()) >= getOperatorPriority(operators[i - 1])) {
+                        postfixExp.add(operatorsForPostfix.pop());
+                    }
+                    operatorsForPostfix.push(operators[i - 1]);
+                }
+                postfixExp.add(operands.get(i));
             }
         }
 
-        Vector<Hashtable<String, Object>> queryResult;
-        queryResult = termsSets.pop();
-        return queryResult.iterator();
+        while (!operatorsForPostfix.isEmpty())
+            postfixExp.add(operatorsForPostfix.pop());
+
+
+        Stack<Vector<Hashtable<String, Object>>> evalExp = new Stack<>();
+
+        for (Object o : postfixExp) {
+            if (o instanceof String) {
+                Vector<Hashtable<String, Object>> a = evalExp.pop();
+                Vector<Hashtable<String, Object>> b = evalExp.pop();
+
+                String op = (String) o;
+                switch (op) {
+                    case "AND":
+                        Vector<Hashtable<String, Object>> aIntersectB = rowsIntersection(a, b, clusteringColumnName);
+                        evalExp.push(aIntersectB);
+                        break;
+                    case "OR":
+                        Vector<Hashtable<String, Object>> aUnionB = rowsUnion(a, b, clusteringColumnName);
+                        evalExp.push(aUnionB);
+                        break;
+                    case "XOR":
+                        Vector<Hashtable<String, Object>> aDiffB = rowsDifference(a, b, clusteringColumnName);
+                        Vector<Hashtable<String, Object>> bDiffA = rowsDifference(b, a, clusteringColumnName);
+                        Vector<Hashtable<String, Object>> aXorB = rowsUnion(aDiffB, bDiffA, clusteringColumnName);
+                        evalExp.push(aXorB);
+                        break;
+                }
+            } else {
+                evalExp.push((Vector<Hashtable<String, Object>>) o);
+            }
+        }
+
+        return evalExp.pop();
     }
 
+
+    private int getOperatorPriority(String operator) {
+
+        switch (operator) {
+
+            case "XOR":
+                return 3;
+            case "AND":
+                return 2;
+            case "OR":
+                return 1;
+            default:
+                return -1;
+        }
+    }
 
     private Vector<Hashtable<String, Object>> getValidRowsInBucket(Vector<SQLTerm> terms, Vector<Bucket> buckets, String clusteringColumnName) throws IOException, ClassNotFoundException {
         Hashtable<String, Vector<Object>> rows = new Hashtable<>();
@@ -1602,40 +1658,5 @@ public class DBApp implements DBAppInterface {
         return listener.getIterator();
     }
 
-    public static void main(String[] args) throws DBAppException, IOException, ClassNotFoundException, ParseException {
-        DBApp dbApp = new DBApp();
-         Iterator iterator = dbApp.parseSQL(new StringBuffer(""));
 
-//        int c = 0;
-//        while (iterator.hasNext()){
-//            System.out.println(iterator.next());
-//            c++;
-//        }
-//        System.out.println(c);
-//        System.out.println("-------------------------------------------------");
-
-//        dbApp.parseSQL(new StringBuffer("update students set first_name = 'mohammad', last_name = 'hossam' where id = '43-0276'"));
-
-//        iterator = dbApp.parseSQL(new StringBuffer("select * from students where id = '43-0276' "));
-
-//
-//        c = 0;
-//        while (iterator.hasNext()){
-//            System.out.println(iterator.next());
-//            c++;
-//        }
-//        System.out.println(c);
-
-//        dbApp.parseSQL(new StringBuffer("Insert into students (id, gpa, dob, first_name, last_name) values ('46-17077', 0.98, '2000-09-01', 'Mohamed', 'MMMohmed')"));
-//        Iterator iterator = dbApp.parseSQL(new StringBuffer("select * from students where gpa = 0.98"));
-//        int c = 0;
-//
-//        while (iterator.hasNext()){
-//            System.out.println(iterator.next());
-//            c++;
-//        }
-//
-//        System.out.println(c);
-//        System.out.println("-------------------------------------------------");
-    }
 }
