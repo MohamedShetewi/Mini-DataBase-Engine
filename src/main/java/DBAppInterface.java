@@ -19,5 +19,5 @@ public interface DBAppInterface {
 
     Iterator selectFromTable(SQLTerm[] sqlTerms, String[] arrayOperators) throws DBAppException, IOException, ClassNotFoundException, ParseException;
 
-
+    Iterator parseSQL(StringBuffer strBufSQL) throws DBAppException;
 }

@@ -997,8 +997,8 @@ public class DBApp implements DBAppInterface {
         Page page = pages.get(index);//page that contains the row to delete
         HashSet<Object> deletedRows = new HashSet<>();
         int state = deleteFromPage(page, columnNameValue, clusteringKey, deletedRows);//returns -1 if the page is empty
-        if(!deletedRows.isEmpty())
-            deleteFromIndex(table,deletedRows,columnNameValue);
+        if (!deletedRows.isEmpty())
+            deleteFromIndex(table, deletedRows, columnNameValue);
         if (state == -1) {
             //if the page is empty,remove it from the vector
             pages.remove(index);
@@ -1107,6 +1107,7 @@ public class DBApp implements DBAppInterface {
         queryResult = termsSets.pop();
         return queryResult.iterator();
     }
+
 
     private Vector<Hashtable<String, Object>> getValidRowsInBucket(Vector<SQLTerm> terms, Vector<Bucket> buckets, String clusteringColumnName) throws IOException, ClassNotFoundException {
         Hashtable<String, Vector<Object>> rows = new Hashtable<>();
@@ -1587,6 +1588,7 @@ public class DBApp implements DBAppInterface {
         return new Object[]{colDataTypes, colMin, colMax, clusteringType, clusteringCol};
     }
 
+    @Override
     public Iterator parseSQL(StringBuffer strBufSQL) throws DBAppException {
         SQLiteLexer lexer = new SQLiteLexer(CharStreams.fromString(strBufSQL.toString()));
         MiniSQLParser parser = new MiniSQLParser(new CommonTokenStream(lexer));
@@ -1602,9 +1604,7 @@ public class DBApp implements DBAppInterface {
 
     public static void main(String[] args) throws DBAppException, IOException, ClassNotFoundException, ParseException {
         DBApp dbApp = new DBApp();
-       // Iterator iterator = dbApp.parseSQL(new StringBuffer("insert into students (id, firs) "));
-        dbApp.parseSQL(new StringBuffer("create index n on students (id, dob, gpa)"));
-    //    dbApp.parseSQL(new StringBuffer("update student set first_name = 'mohammad', last_name = 'hossam' where id = '43-0276'"));
+         Iterator iterator = dbApp.parseSQL(new StringBuffer(""));
 
 //        int c = 0;
 //        while (iterator.hasNext()){
