@@ -189,7 +189,7 @@ public class DBApp implements DBAppInterface {
                             delete(curPage.getPath());
                             serializeObject(pageRecords, curPage.getPath());
 
-                            Vector<Object> deleted = new Vector<>();
+                            HashSet<Object> deleted = new HashSet<>();
                             deleted.add(lastRecord.get(primaryKey));
                             deleteFromIndex(t, deleted, lastRecord);
                             rowsForIndex.clear();
@@ -370,7 +370,7 @@ public class DBApp implements DBAppInterface {
             if (compare(record.get(primaryKey), colNameValue.get(primaryKey)) > 0) {
                 Hashtable<String, Object> newRecord = pageRecords.remove(i--);
                 newPageRecords.add(newRecord);
-                Vector<Object> deleted = new Vector<>();
+                HashSet<Object> deleted = new HashSet<>();
                 deleted.add(colNameValue.get(primaryKey));
                 deleteFromIndex(table, deleted, colNameValue);
             }
@@ -667,17 +667,18 @@ public class DBApp implements DBAppInterface {
             System.out.println("Invalid clustering key value");
             return;
         }
-        Vector<Object> deleted = new Vector<>();
+        HashSet<Object> deleted = new HashSet<>();
         deleted.add(clusteringObject);
         deleteFromIndex(t, deleted, page.get(rowIdx));
         for (String key : columnNameValue.keySet()) {
             page.get(rowIdx).replace(key, columnNameValue.get(key));
         }
+        delete(t.getPages().get(pageIdx).getPath());
+        serializeObject(page, t.getPages().get(pageIdx).getPath());
         Vector<Hashtable<String, Object>> insertedIntoIndex = new Vector<>();
         insertedIntoIndex.add(page.get(pageIdx));
         insertIntoIndex(t.getIndices(), insertedIntoIndex, clusteringCol, t.getPages().get(pageIdx).getPath());
-        delete(t.getPages().get(pageIdx).getPath());
-        serializeObject(page, t.getPages().get(pageIdx).getPath());
+
     }
 
     private int searchForPage(Vector<Page> pages, Object clusteringObject) {
@@ -800,7 +801,7 @@ public class DBApp implements DBAppInterface {
      * @throws ClassNotFoundException If an error occurred in the stored table pages format
      * @throws IOException            If an I/O error occurred
      */
-    private int deleteFromPage(Page p, Hashtable<String, Object> columnNameValue, String clusteringKey, Vector<Object> deletedRows) throws IOException, ClassNotFoundException {
+    private int deleteFromPage(Page p, Hashtable<String, Object> columnNameValue, String clusteringKey, HashSet<Object> deletedRows) throws IOException, ClassNotFoundException {
         //read the page from disk
         Vector<Hashtable<String, Object>> rows = (Vector<Hashtable<String, Object>>) deserializeObject(p.getPath());
         int state = 0;//return state
@@ -817,6 +818,7 @@ public class DBApp implements DBAppInterface {
                     rows.remove(idxInsidePage);
                     state = 1;
                 }
+
             }
         } else {
             Iterator<Hashtable<String, Object>> rowsIterator = rows.iterator();
@@ -871,7 +873,7 @@ public class DBApp implements DBAppInterface {
                 maximumMatchIndex = i;
             }
         }
-        Vector<Object> deletedRows = new Vector<>();
+        HashSet<Object> deletedRows = new HashSet<>();
         if (maximumMatch == 0) {
             deleteFromTableLinear(table, columnNameValue, clusteringKey, deletedRows);
         } else {
@@ -883,7 +885,7 @@ public class DBApp implements DBAppInterface {
         return deletedRows.size() > 0;
     }
 
-    private void deleteFromTableLinear(Table table, Hashtable<String, Object> columnNameValue, String clusteringKey, Vector<Object> deletedRows) throws IOException, ClassNotFoundException {
+    private void deleteFromTableLinear(Table table, Hashtable<String, Object> columnNameValue, String clusteringKey, HashSet<Object> deletedRows) throws IOException, ClassNotFoundException {
         Vector<Page> pages = table.getPages();
         Iterator<Page> pagesIterator = pages.iterator();
         while (pagesIterator.hasNext()) {
@@ -896,7 +898,7 @@ public class DBApp implements DBAppInterface {
         }
     }
 
-    private void deleteUsingIndex(Table t, Index index, Object grid, Hashtable<String, Object> columnNameValue, String clusteringKey, Vector<Object> deletedRows) throws IOException, ClassNotFoundException {
+    private void deleteUsingIndex(Table t, Index index, Object grid, Hashtable<String, Object> columnNameValue, String clusteringKey, HashSet<Object> deletedRows) throws IOException, ClassNotFoundException {
         Hashtable<String, Range> colNameRange = getColNameRange(index, columnNameValue);
         Vector<Vector<Bucket>> cells = searchInsideIndex(index, grid, colNameRange);
         Hashtable<String, Vector<Object>> pages = new Hashtable<>();
@@ -929,7 +931,7 @@ public class DBApp implements DBAppInterface {
         }
     }
 
-    private void deleteFromIndex(Table table, Vector<Object> deletedRows, Hashtable<String, Object> columnNameValue) throws IOException, ClassNotFoundException {
+    private void deleteFromIndex(Table table, HashSet<Object> deletedRows, Hashtable<String, Object> columnNameValue) throws IOException, ClassNotFoundException {
         Vector<Index> indices = table.getIndices();
         for (Index index : indices) {
             Object grid = deserializeObject(index.getPath());
@@ -941,18 +943,18 @@ public class DBApp implements DBAppInterface {
                     Bucket bucket = bucketIterator.next();
                     Hashtable<Hashtable<String, Object>, Vector<RowReference>> references = (Hashtable<Hashtable<String, Object>, Vector<RowReference>>) deserializeObject(bucket.getPath());
                     Iterator<Map.Entry<Hashtable<String, Object>, Vector<RowReference>>> iterator = references.entrySet().iterator();
-                    int newSize=0;
+                    int newSize = 0;
                     while (iterator.hasNext()) {
                         Vector<RowReference> rowReferences = iterator.next().getValue();
                         rowReferences.removeIf(rowReference -> deletedRows.contains(rowReference.getClusteringValue()));
-                        newSize+=rowReferences.size();
+                        newSize += rowReferences.size();
                         if (rowReferences.size() == 0)
                             iterator.remove();
                     }
+                    delete(bucket.getPath());
                     if (references.isEmpty())
                         bucketIterator.remove();
                     else {
-                        delete(bucket.getPath());
                         bucket.setNumOfRecords(newSize);
                         serializeObject(references, bucket.getPath());
                     }
@@ -993,8 +995,10 @@ public class DBApp implements DBAppInterface {
         if (index >= pages.size())//row not found
             return false;
         Page page = pages.get(index);//page that contains the row to delete
-        Vector<Object> deletedRows = new Vector<>();
+        HashSet<Object> deletedRows = new HashSet<>();
         int state = deleteFromPage(page, columnNameValue, clusteringKey, deletedRows);//returns -1 if the page is empty
+        if(!deletedRows.isEmpty())
+            deleteFromIndex(table,deletedRows,columnNameValue);
         if (state == -1) {
             //if the page is empty,remove it from the vector
             pages.remove(index);
@@ -1024,7 +1028,7 @@ public class DBApp implements DBAppInterface {
 
         if (indicesWithTerms != null) {
             for (Pair pair : indicesWithTerms) {
-                if(pair.terms.isEmpty())
+                if (pair.terms.isEmpty())
                     continue;
                 Index index = pair.getIndex();
                 Vector<SQLTerm> indexTerms = pair.getTerms();
@@ -1178,7 +1182,7 @@ public class DBApp implements DBAppInterface {
         for (String operator : arrayOperators)
             if (!operator.equals("AND"))
                 return null;
-        for (SQLTerm term:sqlTerms)
+        for (SQLTerm term : sqlTerms)
             if (term._strOperator.equals("!="))
                 return null;
 
@@ -1193,14 +1197,14 @@ public class DBApp implements DBAppInterface {
         for (Index index : tableIndices) {
             Vector<SQLTerm> validTerms = new Vector<>();
             String[] columnNames = index.getColumnNames();
-            for (int i=0;i<columnNames.length;i++) {
+            for (int i = 0; i < columnNames.length; i++) {
                 String dimensionName = columnNames[i];
                 if (termsColumnNames.contains(dimensionName)
                         && !termsVisited[termsColumnNames.indexOf(dimensionName)]) {
                     validTerms.add(sqlTerms[termsColumnNames.indexOf(dimensionName)]);
                     termsVisited[termsColumnNames.indexOf(dimensionName)] = true;
                     indexedColumns.add(dimensionName);
-                    if (i == index.getColumnNames().length -1){
+                    if (i == index.getColumnNames().length - 1) {
                         Pair p = new Pair(index, validTerms);
                         termsOfIndices.add(p);
                     }
@@ -1543,7 +1547,8 @@ public class DBApp implements DBAppInterface {
      * @throws ParseException
      */
 
-    Object[] getTableInfo(String tableName) throws IOException, ParseException {
+    Object[] getTableInfo(String tableName) throws IOException, ParseException, DBAppException {
+        validateExistingTable(tableName);
         FileReader metadata = new FileReader("src/main/resources/metadata.csv");
         BufferedReader br = new BufferedReader(metadata);
         String curLine;
@@ -1596,6 +1601,41 @@ public class DBApp implements DBAppInterface {
     }
 
     public static void main(String[] args) throws DBAppException, IOException, ClassNotFoundException, ParseException {
+        DBApp dbApp = new DBApp();
+       // Iterator iterator = dbApp.parseSQL(new StringBuffer("insert into students (id, firs) "));
+        dbApp.parseSQL(new StringBuffer("create index n on students (id, dob, gpa)"));
+    //    dbApp.parseSQL(new StringBuffer("update student set first_name = 'mohammad', last_name = 'hossam' where id = '43-0276'"));
 
-   }
+//        int c = 0;
+//        while (iterator.hasNext()){
+//            System.out.println(iterator.next());
+//            c++;
+//        }
+//        System.out.println(c);
+//        System.out.println("-------------------------------------------------");
+
+//        dbApp.parseSQL(new StringBuffer("update students set first_name = 'mohammad', last_name = 'hossam' where id = '43-0276'"));
+
+//        iterator = dbApp.parseSQL(new StringBuffer("select * from students where id = '43-0276' "));
+
+//
+//        c = 0;
+//        while (iterator.hasNext()){
+//            System.out.println(iterator.next());
+//            c++;
+//        }
+//        System.out.println(c);
+
+//        dbApp.parseSQL(new StringBuffer("Insert into students (id, gpa, dob, first_name, last_name) values ('46-17077', 0.98, '2000-09-01', 'Mohamed', 'MMMohmed')"));
+//        Iterator iterator = dbApp.parseSQL(new StringBuffer("select * from students where gpa = 0.98"));
+//        int c = 0;
+//
+//        while (iterator.hasNext()){
+//            System.out.println(iterator.next());
+//            c++;
+//        }
+//
+//        System.out.println(c);
+//        System.out.println("-------------------------------------------------");
+    }
 }

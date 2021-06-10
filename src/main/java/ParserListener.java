@@ -46,7 +46,11 @@ public class ParserListener extends MiniSQLParserBaseListener {
                 SQLTerm term = new SQLTerm();
                 term._strColumnName = terminals.get(i);
                 term._strOperator = terminals.get(i + 1).equals("<>") ? "!=" : terminals.get(i + 1);
-                term._objValue = castString(colDataTypes.get(term._strColumnName), terminals.get(i + 2));
+                try {
+                    term._objValue = castString(colDataTypes.get(term._strColumnName), terminals.get(i + 2));
+                } catch (NullPointerException e) {
+                    throw new DBAppException("Wrong column name!");
+                }
                 term._strTableName = tableName;
                 sqlTerms[i / 4] = term;
                 if (i / 4 < operators.length)
@@ -135,7 +139,12 @@ public class ParserListener extends MiniSQLParserBaseListener {
             }
             for (int i = 0; i < ctx.column_name().size(); i++) {
                 String colName = ctx.column_name(i).getText();
-                Object val = castString(colNameType.get(colName), ctx.literals(i).getText());
+                Object val;
+                try {
+                    val = castString(colNameType.get(colName), ctx.literals(i).getText());
+                } catch (NullPointerException e) {
+                    throw new DBAppException("Wrong column name!");
+                }
                 colNameValue.put(colName, val);
             }
             dbApp.insertIntoTable(tableName, colNameValue);
@@ -158,7 +167,12 @@ public class ParserListener extends MiniSQLParserBaseListener {
             }
             for (int i = 0; i < ctx.column_name().size(); i++) {
                 String colName = ctx.column_name(i).getText();
-                Object val = castString(colNameType.get(colName), ctx.literals(i).getText());
+                Object val;
+                try {
+                    val = castString(colNameType.get(colName), ctx.literals(i).getText());
+                } catch (NullPointerException e) {
+                    throw new DBAppException("Wrong column name!");
+                }
                 colNameValue.put(colName, val);
             }
             StringTokenizer st = new StringTokenizer(ctx.update_cond().literals().getText(), "'\"");
@@ -177,8 +191,12 @@ public class ParserListener extends MiniSQLParserBaseListener {
             traverse(ctx.limited_expr());
             Hashtable<String, Object> colNameVal = new Hashtable<>();
             Hashtable<String, String> colNameType = (Hashtable<String, String>) (dbApp.getTableInfo(tableName))[0];
-            for (int i = 0; i < terminals.size(); i += 3) {
-                colNameVal.put(terminals.get(i), castString(colNameType.get(terminals.get(i)), terminals.get(i + 2)));
+            for (int i = 0; i < terminals.size(); i += 4) {
+                try {
+                    colNameVal.put(terminals.get(i), castString(colNameType.get(terminals.get(i)), terminals.get(i + 2)));
+                } catch (NullPointerException e) {
+                    throw new DBAppException("Wrong column name!");
+                }
             }
             dbApp.deleteFromTable(tableName, colNameVal);
         } catch (DBAppException | ClassNotFoundException | IOException | ParseException e) {
